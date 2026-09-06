@@ -39,16 +39,23 @@ public static partial class ConfigBuilder
         //     inits its backend (Unity loads steam_api64 lazily).
         //   SdrSafe: when SDR is on, keep the process Steam context on the real
         //     AppId so the overlay's early spacewar load doesn't poison relay auth.
+        //   RequireSteam: abort the launch if Steam isn't running (default on).
+        // LoadDLLsEarly/SdrSafe default to the auto behavior above but can be forced
+        // either way from the GUI (LoadDllsEarly/SdrSafe are null = auto).
         bool anyPlugin = options.InstallPhoton || options.InstallEos
             || options.InstallCoherence || options.InstallPlayFab;
-        if (anyPlugin || options.EnableSdr)
+        bool loadEarly = options.LoadDllsEarly ?? anyPlugin;
+        bool sdrSafe = options.SdrSafe ?? options.EnableSdr;
+        if (loadEarly || sdrSafe || !options.RequireSteam)
         {
             output.AppendLine();
             output.AppendLine("[VersionProxy]");
-            if (anyPlugin)
+            if (loadEarly)
                 output.AppendLine("LoadDLLsEarly=true");
-            if (options.EnableSdr)
+            if (sdrSafe)
                 output.AppendLine("SdrSafe=true");
+            if (!options.RequireSteam)
+                output.AppendLine("RequireSteam=false");
         }
 
         if (options.InstallPhoton)
@@ -62,6 +69,8 @@ public static partial class ConfigBuilder
                 output.AppendLine($"PhotonAppIdRealtime={SingleLine(options.PhotonRealtimeAppId)}");
             if (!string.IsNullOrWhiteSpace(options.PhotonVoiceAppId))
                 output.AppendLine($"PhotonAppIdVoice={SingleLine(options.PhotonVoiceAppId)}");
+            if (!string.IsNullOrWhiteSpace(options.PhotonNickname))
+                output.AppendLine($"Nickname={SingleLine(options.PhotonNickname)}");
             output.AppendLine("ForcedAuthType=0");
         }
 
@@ -86,6 +95,8 @@ public static partial class ConfigBuilder
             // vs KeepGameApp choice above, so written for either.
             if (options.EosNoPresence)
                 output.AppendLine("NoPresence=1");
+            if (options.EosVerboseLog)
+                output.AppendLine("VerboseLog=1");
             output.AppendLine($"DisplayName={SingleLine(options.DisplayName)}");
         }
 
@@ -95,7 +106,11 @@ public static partial class ConfigBuilder
             output.AppendLine("[Coherence]");
             output.AppendLine("ForceGuestLogin=true");
             output.AppendLine($"RuntimeKey={SingleLine(options.CoherenceRuntimeKey)}");
+            if (!string.IsNullOrWhiteSpace(options.CoherenceProjectId))
+                output.AppendLine($"ProjectId={SingleLine(options.CoherenceProjectId)}");
             output.AppendLine("LocalMode=false");
+            if (options.CoherenceLaunchReplicationServer)
+                output.AppendLine("LaunchReplicationServer=true");
         }
 
         if (options.InstallPlayFab)
@@ -106,9 +121,70 @@ public static partial class ConfigBuilder
                 output.AppendLine("KeepGameTitle=1");
             if (!string.IsNullOrWhiteSpace(options.PlayFabTitleId))
                 output.AppendLine($"TitleId={SingleLine(options.PlayFabTitleId)}");
+            if (options.PlayFabVerboseLog)
+                output.AppendLine("VerboseLog=1");
         }
 
-        return output.ToString().Replace("\r\n", "\n").Replace("\n", Environment.NewLine);
+        string merged = MergeAdvancedIni(output.ToString(), options.AdvancedIni);
+        return merged.Replace("\r\n", "\n").Replace("\n", Environment.NewLine);
+    }
+
+    // Merge the raw "Advanced ini" box into the generated config. Lines under a
+    // [Section] header target that section; a key with no header goes to [Settings].
+    // An existing key is overridden in place; a new key is appended to its section;
+    // a section not already present is added at the end. One header per section, so
+    // GetPrivateProfileString (first-section-wins) still reads every value.
+    private static string MergeAdvancedIni(string baseIni, string? advanced)
+    {
+        if (string.IsNullOrWhiteSpace(advanced)) return baseIni;
+
+        var extras = new List<(string Section, string Key, string Value)>();
+        string current = "Settings";
+        foreach (string rawLine in advanced.Replace("\r\n", "\n").Split('\n'))
+        {
+            string line = rawLine.Trim();
+            if (line.Length == 0 || line.StartsWith(';') || line.StartsWith('#')) continue;
+            if (line.StartsWith('[') && line.EndsWith(']')) { current = line[1..^1].Trim(); continue; }
+            int eq = line.IndexOf('=');
+            if (eq <= 0) continue;   // ignore malformed lines
+            extras.Add((current, line[..eq].Trim(), line[(eq + 1)..].Trim()));
+        }
+        if (extras.Count == 0) return baseIni;
+
+        var lines = baseIni.Replace("\r\n", "\n").Split('\n').ToList();
+
+        static bool IsHeader(string l) => l.TrimStart().StartsWith('[') && l.TrimEnd().EndsWith(']');
+        static string HeaderName(string l) { string t = l.Trim(); return t[1..^1].Trim(); }
+        static string KeyName(string l) { int i = l.IndexOf('='); return i <= 0 ? "" : l[..i].Trim(); }
+
+        foreach ((string section, string key, string value) in extras)
+        {
+            int header = lines.FindIndex(l => IsHeader(l) &&
+                HeaderName(l).Equals(section, StringComparison.OrdinalIgnoreCase));
+            if (header < 0)
+            {
+                if (lines.Count > 0 && lines[^1].Trim().Length != 0) lines.Add("");
+                lines.Add($"[{section}]");
+                lines.Add($"{key}={value}");
+                continue;
+            }
+            int end = header + 1;
+            while (end < lines.Count && !IsHeader(lines[end])) end++;
+            int keyIdx = -1;
+            for (int i = header + 1; i < end; i++)
+                if (KeyName(lines[i]).Equals(key, StringComparison.OrdinalIgnoreCase)) { keyIdx = i; break; }
+            if (keyIdx >= 0)
+            {
+                lines[keyIdx] = $"{key}={value}";
+            }
+            else
+            {
+                int insertAt = end;
+                while (insertAt - 1 > header && lines[insertAt - 1].Trim().Length == 0) insertAt--;
+                lines.Insert(insertAt, $"{key}={value}");
+            }
+        }
+        return string.Join("\n", lines);
     }
 
     private static IReadOnlyList<(uint AppId, string Name)> FindDlcEntries(GameScanResult game)

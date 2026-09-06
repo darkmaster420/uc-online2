@@ -29,6 +29,7 @@ internal static class Program
             TestPlayFabPlanning(root);
             TestEosPlanning(root);
             TestEosNoPresenceConfig(root);
+            TestAdvancedAndProxyConfig(root);
             await TestSelfUpdateLayout(root);
             await TestBackupRestoreAndPackage(root);
             Console.WriteLine($"PASS: {passed} tests");
@@ -131,6 +132,39 @@ internal static class Program
         };
         True(!ConfigBuilder.Build(game, off).Contains("NoPresence"),
             "NoPresence absent when the flag is off");
+        passed++;
+    }
+
+    // [VersionProxy] auto/override + the "Advanced ini" raw escape-hatch merge.
+    private static void TestAdvancedAndProxyConfig(string root)
+    {
+        GameScanResult game = FakeGame(root);
+
+        // LoadDLLsEarly auto-on when a plugin is deployed; forced off overrides it.
+        var auto = new PatchOptions { OriginalAppId = 1, InstallOverlayProxy = false, InstallEos = true, EosKeepGameApp = true };
+        True(ConfigBuilder.Build(game, auto).Contains("LoadDLLsEarly=true"), "LoadDLLsEarly auto-on with a plugin");
+        var off = new PatchOptions { OriginalAppId = 1, InstallOverlayProxy = false, InstallEos = true, EosKeepGameApp = true, LoadDllsEarly = false };
+        True(!ConfigBuilder.Build(game, off).Contains("LoadDLLsEarly=true"), "LoadDLLsEarly forced off");
+
+        // RequireSteam only written when explicitly turned off.
+        True(ConfigBuilder.Build(game, new PatchOptions { OriginalAppId = 1, InstallOverlayProxy = false, RequireSteam = false }).Contains("RequireSteam=false"),
+            "RequireSteam=false written");
+        True(!ConfigBuilder.Build(game, new PatchOptions { OriginalAppId = 1, InstallOverlayProxy = false }).Contains("RequireSteam"),
+            "RequireSteam omitted by default");
+
+        // Advanced ini: overrides an existing key in place, merges into an existing
+        // generated section (one header), and appends a brand-new section.
+        var adv = new PatchOptions
+        {
+            AppId = 480, OriginalAppId = 1, InstallOverlayProxy = false,
+            InstallPlayFab = true, PlayFabTitleId = "ABCD",
+            AdvancedIni = "AppId=999\n[PlayFab]\nRedirectNativeHttp=1\n[Custom]\nFoo=bar"
+        };
+        string advCfg = ConfigBuilder.Build(game, adv);
+        True(advCfg.Contains("AppId=999") && !advCfg.Contains("AppId=480"), "Advanced overrides AppId in place");
+        True(advCfg.Contains("RedirectNativeHttp=1") && advCfg.Contains("TitleId=ABCD"), "Advanced key merged into existing [PlayFab]");
+        True(advCfg.Split("[PlayFab]").Length - 1 == 1, "single [PlayFab] header after merge");
+        True(advCfg.Contains("[Custom]") && advCfg.Contains("Foo=bar"), "Advanced new section appended");
         passed++;
     }
 

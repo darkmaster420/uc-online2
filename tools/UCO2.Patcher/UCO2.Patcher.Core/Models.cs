@@ -109,6 +109,12 @@ public sealed class PatchOptions
     public bool EmulateTicket { get; set; }
     public bool EnableSdr { get; set; }
     public bool InventoryAutoGrant { get; set; }
+    // [VersionProxy] early-loader flags. LoadDllsEarly/SdrSafe are null = auto
+    // (LoadDLLsEarly on when any plugin is deployed; SdrSafe on when SDR is on);
+    // set true/false to force. RequireSteam defaults on (abort if Steam is closed).
+    public bool? LoadDllsEarly { get; set; }
+    public bool? SdrSafe { get; set; }
+    public bool RequireSteam { get; set; } = true;
     public bool InstallPhoton { get; set; }
     public bool InstallEos { get; set; }
     public bool InstallPlayFab { get; set; }
@@ -116,6 +122,7 @@ public sealed class PatchOptions
     public string PhotonRealtimeAppId { get; set; } = "";
     public string PhotonFusionAppId { get; set; } = "";
     public string PhotonVoiceAppId { get; set; } = "";
+    public string PhotonNickname { get; set; } = "";
     public string EosProductId { get; set; } = "";
     public string EosSandboxId { get; set; } = "";
     public string EosDeploymentId { get; set; } = "";
@@ -128,12 +135,23 @@ public sealed class PatchOptions
     // anonymous Device ID login can't satisfy: force non-presence lobbies AND disable the
     // EOS integrated platform. Applies in both KeepGameApp and redirect modes.
     public bool EosNoPresence { get; set; }
+    // [EOS] VerboseLog -- route the EOS SDK's full verbose log into the host log.
+    public bool EosVerboseLog { get; set; }
     public string PlayFabTitleId { get; set; } = "";
     // Anonymous login on the game's OWN PlayFab title (no redirect); wins over TitleId.
     public bool PlayFabKeepGameTitle { get; set; }
+    // [PlayFab] VerboseLog -- log every PlayFab request/rewrite/response.
+    public bool PlayFabVerboseLog { get; set; }
     public string CoherenceRuntimeKey { get; set; } = "";
+    public string CoherenceProjectId { get; set; } = "";
+    // [Coherence] LaunchReplicationServer -- host a local replication server (LAN mode).
+    public bool CoherenceLaunchReplicationServer { get; set; }
     public string LegacyClientVersion { get; set; } = "";
     public Dictionary<string, string> AdditionalSettings { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    // Raw ini appended/merged verbatim: the escape hatch for any flag without a
+    // dedicated control. Lines under a [Section] header target that section (a key
+    // with no header goes to [Settings]); an existing key is overridden in place.
+    public string AdvancedIni { get; set; } = "";
 }
 
 public enum PatchOperationKind

@@ -193,6 +193,8 @@
                                                           Click="BackendCheck_Toggled" />
                                             <TextBlock Text="Disables EOS presence &amp; the Steam&#x2194;EOS integrated platform so an anonymous login can host/join. Only for Steam+EOS games where co-op fails with a lobby-permission error."
                                                        Foreground="{StaticResource MutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,5,0,0" />
+                                            <ToggleButton x:Name="EosVerboseCheck" Style="{StaticResource OptionToggle}" Margin="0,10,0,0"
+                                                          Content="Verbose EOS SDK logging" ToolTip="[EOS] VerboseLog — route the EOS SDK's full verbose log into the host log" />
                                         </StackPanel>
                                     </Border>
 
@@ -207,10 +209,11 @@
                                             </Grid>
                                             <Grid>
                                                 <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                                                <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+                                                <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
                                                 <TextBlock Text="Realtime AppId" VerticalAlignment="Center" Margin="0,4" /><TextBox x:Name="PhotonRealtimeBox" Grid.Column="1" Margin="0,3" TextChanged="BackendField_Changed" />
                                                 <TextBlock Grid.Row="1" Text="Fusion AppId" VerticalAlignment="Center" Margin="0,4" /><TextBox x:Name="PhotonFusionBox" Grid.Row="1" Grid.Column="1" Margin="0,3" TextChanged="BackendField_Changed" />
                                                 <TextBlock Grid.Row="2" Text="Voice AppId" VerticalAlignment="Center" Margin="0,4" /><TextBox x:Name="PhotonVoiceBox" Grid.Row="2" Grid.Column="1" Margin="0,3" TextChanged="BackendField_Changed" />
+                                                <TextBlock Grid.Row="3" Text="Nickname" VerticalAlignment="Center" Margin="0,4" /><TextBox x:Name="PhotonNicknameBox" Grid.Row="3" Grid.Column="1" Margin="0,3" ToolTip="Optional display name (Photon Nickname)" />
                                             </Grid>
                                         </StackPanel>
                                     </Border>
@@ -231,6 +234,8 @@
                                                 <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                                 <TextBlock Text="TitleId" VerticalAlignment="Center" Margin="0,4" /><TextBox x:Name="PlayFabTitleBox" Grid.Column="1" Margin="0,3" TextChanged="BackendField_Changed" />
                                             </Grid>
+                                            <ToggleButton x:Name="PlayFabVerboseCheck" Style="{StaticResource OptionToggle}" Margin="0,10,0,0"
+                                                          Content="Verbose PlayFab logging" ToolTip="[PlayFab] VerboseLog — log every PlayFab request/rewrite/response" />
                                         </StackPanel>
                                     </Border>
 
@@ -240,8 +245,12 @@
                                             <TextBlock Text="COHERENCE" Foreground="{StaticResource MutedBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,0,8" />
                                             <Grid>
                                                 <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
                                                 <TextBlock Text="Runtime key" VerticalAlignment="Center" Margin="0,4" /><TextBox x:Name="CoherenceKeyBox" Grid.Column="1" Margin="0,3" />
+                                                <TextBlock Grid.Row="1" Text="Project ID" VerticalAlignment="Center" Margin="0,4" /><TextBox x:Name="CoherenceProjectBox" Grid.Row="1" Grid.Column="1" Margin="0,3" ToolTip="Optional coherence ProjectId" />
                                             </Grid>
+                                            <ToggleButton x:Name="CoherenceLocalServerCheck" Style="{StaticResource OptionToggle}" Margin="0,10,0,0"
+                                                          Content="Host local replication server (LAN)" ToolTip="[Coherence] LaunchReplicationServer — run a local replication server instead of Cloud rooms" />
                                         </StackPanel>
                                     </Border>
 
@@ -254,7 +263,7 @@
                                                 <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
                                                 <TextBlock Text="Emulated AppId" VerticalAlignment="Center" Margin="0,4" /><TextBox x:Name="AppIdBox" Grid.Column="1" Margin="0,3" Text="480" />
                                                 <TextBlock Grid.Row="1" Text="Legacy client version" VerticalAlignment="Center" Margin="0,4" /><TextBox x:Name="LegacyClientBox" Grid.Row="1" Grid.Column="1" Margin="0,3" />
-                                                <TextBlock Grid.Row="2" Text="Additional flags" VerticalAlignment="Top" Margin="0,8,0,0" /><TextBox x:Name="AdditionalFlagsBox" Grid.Row="2" Grid.Column="1" Height="58" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Margin="0,3" ToolTip="One Settings key=value per line" />
+                                                <TextBlock Grid.Row="2" Text="Advanced ini" VerticalAlignment="Top" Margin="0,8,0,0" /><TextBox x:Name="AdditionalFlagsBox" Grid.Row="2" Grid.Column="1" Height="58" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Margin="0,3" ToolTip="Raw ini, one key=value per line. A bare key goes under [Settings]; add a [Section] line to target another section (e.g. [PlayFab], [EOS]). Overrides any generated value." />
                                             </Grid>
                                             <WrapPanel Margin="0,10,0,0">
                                                 <StackPanel Width="230" Margin="0,0,20,0">
@@ -263,11 +272,16 @@
                                                     <ToggleButton x:Name="EmulateTicketCheck" Style="{StaticResource OptionToggle}" Content="Emulate ticket" />
                                                     <ToggleButton x:Name="SdrCheck" Style="{StaticResource OptionToggle}" Content="Steam Datagram Relay" ToolTip="SDR" Margin="0" />
                                                 </StackPanel>
-                                                <StackPanel Width="230">
+                                                <StackPanel Width="230" Margin="0,0,20,0">
                                                     <ToggleButton x:Name="LogOverlayCheck" Style="{StaticResource OptionToggle}" Content="Overlay logging" />
                                                     <ToggleButton x:Name="WarnOverlayCheck" Style="{StaticResource OptionToggle}" Content="Overlay warning" />
                                                     <ToggleButton x:Name="VerboseLogCheck" Style="{StaticResource OptionToggle}" Content="Verbose logging" />
                                                     <ToggleButton x:Name="InventoryGrantCheck" Style="{StaticResource OptionToggle}" Content="Auto-grant purchases" ToolTip="InventoryAutoGrant — approve ISteamInventory StartPurchase locally and grant/persist the items" Margin="0" />
+                                                </StackPanel>
+                                                <StackPanel Width="230">
+                                                    <ToggleButton x:Name="LoadDllsEarlyCheck" Style="{StaticResource OptionToggle}" Content="Load DLLs early" ToolTip="[VersionProxy] LoadDLLsEarly — preload steam_api64 before the game so plugin hooks land in time. Defaults on when a plugin is deployed." />
+                                                    <ToggleButton x:Name="SdrSafeCheck" Style="{StaticResource OptionToggle}" Content="SDR-safe context" ToolTip="[VersionProxy] SdrSafe — keep the process Steam context on the real AppId so early overlay load doesn't poison SDR relay auth. Defaults on when SDR is on." />
+                                                    <ToggleButton x:Name="RequireSteamCheck" Style="{StaticResource OptionToggle}" IsChecked="True" Content="Require Steam running" ToolTip="[VersionProxy] RequireSteam — abort the launch with a prompt if Steam isn't running (default on)." Margin="0" />
                                                 </StackPanel>
                                             </WrapPanel>
                                         </StackPanel>

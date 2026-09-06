@@ -232,6 +232,19 @@ public partial class MainWindow : Window
         PlayFabTitleBox.Text = ini.Get("PlayFab", "TitleId");
         PlayFabKeepGameTitleCheck.IsChecked = ini.GetBool("PlayFab", "KeepGameTitle");
         CoherenceKeyBox.Text = ini.Get("Coherence", "RuntimeKey");
+        PhotonNicknameBox.Text = ini.Get("Realtime", "Nickname", ini.Get("Fusion", "Nickname"));
+        EosVerboseCheck.IsChecked = ini.GetBool("EOS", "VerboseLog");
+        PlayFabVerboseCheck.IsChecked = ini.GetBool("PlayFab", "VerboseLog");
+        CoherenceProjectBox.Text = ini.Get("Coherence", "ProjectId");
+        CoherenceLocalServerCheck.IsChecked = ini.GetBool("Coherence", "LaunchReplicationServer");
+
+        // [VersionProxy] loader flags. LoadDLLsEarly/SdrSafe default to the auto
+        // behavior (on when a plugin is deployed / when SDR is on); an ini value wins.
+        bool anyPluginSelected = EosCheck.IsChecked == true || PhotonCheck.IsChecked == true
+            || PlayFabCheck.IsChecked == true || CoherenceCheck.IsChecked == true;
+        LoadDllsEarlyCheck.IsChecked = ini.GetBool("VersionProxy", "LoadDLLsEarly", anyPluginSelected);
+        SdrSafeCheck.IsChecked = ini.GetBool("VersionProxy", "SdrSafe", SdrCheck.IsChecked == true);
+        RequireSteamCheck.IsChecked = ini.GetBool("VersionProxy", "RequireSteam", true);
 
         string[] known =
         [
@@ -285,25 +298,20 @@ public partial class MainWindow : Window
             EosNoPresence = EosNoPresenceCheck.IsChecked == true,
             PlayFabTitleId = PlayFabTitleBox.Text,
             PlayFabKeepGameTitle = PlayFabKeepGameTitleCheck.IsChecked == true,
+            PlayFabVerboseLog = PlayFabVerboseCheck.IsChecked == true,
             CoherenceRuntimeKey = CoherenceKeyBox.Text,
-            LegacyClientVersion = LegacyClientBox.Text
+            CoherenceProjectId = CoherenceProjectBox.Text,
+            CoherenceLaunchReplicationServer = CoherenceLocalServerCheck.IsChecked == true,
+            PhotonNickname = PhotonNicknameBox.Text,
+            EosVerboseLog = EosVerboseCheck.IsChecked == true,
+            LoadDllsEarly = LoadDllsEarlyCheck.IsChecked,
+            SdrSafe = SdrSafeCheck.IsChecked,
+            RequireSteam = RequireSteamCheck.IsChecked == true,
+            LegacyClientVersion = LegacyClientBox.Text,
+            // The "Advanced ini" box is the raw escape hatch: merged verbatim into
+            // the generated config (any section, overrides generated values).
+            AdvancedIni = AdditionalFlagsBox.Text
         };
-
-        string[] reserved =
-        [
-            "AppId", "ogAppId", "PluginsFolder", "GetStubbedLol", "LoadOverlay", "LogOverlay",
-            "WarnOverlayDisabled", "VerboseLog", "ForceOwnership", "PassthroughTicket", "EmulateTicket",
-            "SDR", "InventoryAutoGrant", "Client"
-        ];
-        foreach (string raw in AdditionalFlagsBox.Text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            int separator = raw.IndexOf('=');
-            if (separator <= 0) throw new InvalidOperationException($"Additional flag must use key=value: {raw}");
-            string key = raw[..separator].Trim();
-            if (reserved.Contains(key, StringComparer.OrdinalIgnoreCase))
-                throw new InvalidOperationException($"{key} already has a dedicated control and cannot be duplicated in Additional flags.");
-            options.AdditionalSettings[key] = raw[(separator + 1)..].Trim();
-        }
         return options;
     }
 
