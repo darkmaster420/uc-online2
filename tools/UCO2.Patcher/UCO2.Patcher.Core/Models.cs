@@ -124,6 +124,10 @@ public sealed class PatchOptions
     public string DisplayName { get; set; } = "Player";
     // Device ID login on the game's OWN Epic app (no redirect); wins over the ids above.
     public bool EosKeepGameApp { get; set; }
+    // Steam+EOS games whose co-op rides presence / integrated-platform lobbies that an
+    // anonymous Device ID login can't satisfy: force non-presence lobbies AND disable the
+    // EOS integrated platform. Applies in both KeepGameApp and redirect modes.
+    public bool EosNoPresence { get; set; }
     public string PlayFabTitleId { get; set; } = "";
     // Anonymous login on the game's OWN PlayFab title (no redirect); wins over TitleId.
     public bool PlayFabKeepGameTitle { get; set; }

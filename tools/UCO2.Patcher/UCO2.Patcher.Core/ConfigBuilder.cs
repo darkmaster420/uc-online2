@@ -82,6 +82,10 @@ public static partial class ConfigBuilder
                 output.AppendLine($"ClientId={SingleLine(options.EosClientId)}");
                 output.AppendLine($"ClientSecret={SingleLine(options.EosClientSecret)}");
             }
+            // Non-presence lobbies + integrated-platform off. Independent of the redirect
+            // vs KeepGameApp choice above, so written for either.
+            if (options.EosNoPresence)
+                output.AppendLine("NoPresence=1");
             output.AppendLine($"DisplayName={SingleLine(options.DisplayName)}");
         }
 

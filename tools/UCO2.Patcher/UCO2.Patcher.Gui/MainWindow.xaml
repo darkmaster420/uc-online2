@@ -188,6 +188,11 @@
                                                 <TextBlock Grid.Row="4" Text="ClientSecret" VerticalAlignment="Center" Margin="0,4" /><PasswordBox x:Name="EosSecretBox" Grid.Row="4" Grid.Column="1" Margin="0,3" PasswordChanged="EosSecret_Changed" />
                                                 <TextBlock Grid.Row="5" Text="Display name" VerticalAlignment="Center" Margin="0,4" /><TextBox x:Name="DisplayNameBox" Grid.Row="5" Grid.Column="1" Margin="0,3" Text="Player" />
                                             </Grid>
+                                            <ToggleButton x:Name="EosNoPresenceCheck" Style="{StaticResource OptionToggle}" Margin="0,10,0,0"
+                                                          Content="Steam+EOS: non-presence lobbies (turn on if co-op lobbies are rejected)"
+                                                          Click="BackendCheck_Toggled" />
+                                            <TextBlock Text="Disables EOS presence &amp; the Steam&#x2194;EOS integrated platform so an anonymous login can host/join. Only for Steam+EOS games where co-op fails with a lobby-permission error."
+                                                       Foreground="{StaticResource MutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,5,0,0" />
                                         </StackPanel>
                                     </Border>
 

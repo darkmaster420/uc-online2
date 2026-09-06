@@ -28,6 +28,7 @@ internal static class Program
             TestBackendValidation(root);
             TestPlayFabPlanning(root);
             TestEosPlanning(root);
+            TestEosNoPresenceConfig(root);
             await TestSelfUpdateLayout(root);
             await TestBackupRestoreAndPackage(root);
             Console.WriteLine($"PASS: {passed} tests");
@@ -101,6 +102,35 @@ internal static class Program
         True(config.Contains("PassthroughTicket=true"), "Passthrough flag");
         True(config.Contains("Client=017"), "Client flag");
         True(config.Contains("CustomFlag=yes"), "Custom flag");
+        passed++;
+    }
+
+    // [EOS] NoPresence: written under [EOS] when set (either login mode), absent otherwise.
+    private static void TestEosNoPresenceConfig(string root)
+    {
+        GameScanResult game = FakeGame(root);
+
+        var keep = new PatchOptions
+        {
+            OriginalAppId = 123,
+            InstallOverlayProxy = false,
+            InstallEos = true,
+            EosKeepGameApp = true,
+            EosNoPresence = true,
+        };
+        string keepCfg = ConfigBuilder.Build(game, keep);
+        True(keepCfg.Contains("KeepGameApp=1") && keepCfg.Contains("NoPresence=1"),
+            "NoPresence written alongside KeepGameApp");
+
+        var off = new PatchOptions
+        {
+            OriginalAppId = 123,
+            InstallOverlayProxy = false,
+            InstallEos = true,
+            EosKeepGameApp = true,
+        };
+        True(!ConfigBuilder.Build(game, off).Contains("NoPresence"),
+            "NoPresence absent when the flag is off");
         passed++;
     }
 

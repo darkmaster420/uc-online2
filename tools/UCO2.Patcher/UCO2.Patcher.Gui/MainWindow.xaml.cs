@@ -228,6 +228,7 @@ public partial class MainWindow : Window
         EosSecretBox.Password = ini.Get("EOS", "ClientSecret");
         DisplayNameBox.Text = ini.Get("EOS", "DisplayName", "Player");
         EosKeepGameAppCheck.IsChecked = ini.GetBool("EOS", "KeepGameApp");
+        EosNoPresenceCheck.IsChecked = ini.GetBool("EOS", "NoPresence");
         PlayFabTitleBox.Text = ini.Get("PlayFab", "TitleId");
         PlayFabKeepGameTitleCheck.IsChecked = ini.GetBool("PlayFab", "KeepGameTitle");
         CoherenceKeyBox.Text = ini.Get("Coherence", "RuntimeKey");
@@ -281,6 +282,7 @@ public partial class MainWindow : Window
             EosClientSecret = EosSecretBox.Password,
             DisplayName = DisplayNameBox.Text,
             EosKeepGameApp = EosKeepGameAppCheck.IsChecked == true,
+            EosNoPresence = EosNoPresenceCheck.IsChecked == true,
             PlayFabTitleId = PlayFabTitleBox.Text,
             PlayFabKeepGameTitle = PlayFabKeepGameTitleCheck.IsChecked == true,
             CoherenceRuntimeKey = CoherenceKeyBox.Text,
@@ -390,6 +392,7 @@ public partial class MainWindow : Window
             EosClientId = EosClientBox.Text,
             EosClientSecret = EosSecretBox.Password,
             EosKeepGameApp = EosKeepGameAppCheck.IsChecked == true,
+            EosNoPresence = EosNoPresenceCheck.IsChecked == true,
             InstallPlayFab = PlayFabCheck.IsChecked == true,
             PlayFabTitleId = PlayFabTitleBox.Text,
             PlayFabKeepGameTitle = PlayFabKeepGameTitleCheck.IsChecked == true

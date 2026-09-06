@@ -184,6 +184,13 @@ struct EosConfig
                             // are filled in.
     bool bVerboseLog;       // [EOS] VerboseLog: route the EOS SDK's full verbose log
                             // into the host log. Off by default (warnings+errors only).
+    bool bNoPresence;       // [EOS] NoPresence: for games whose co-op rides PRESENCE /
+                            // integrated-platform lobbies, which an anonymous Device ID
+                            // (Connect-only) login can't satisfy. Two effects:
+                            //   1. force bPresenceEnabled=false on every lobby create/join
+                            //   2. NULL the platform's IntegratedPlatformOptionsContainer
+                            //      (the SDK's documented off switch) so the Steam<->EOS
+                            //      identity validation doesn't reject the anon user.
     bool bValid;
 };
 static EosConfig g_Cfg = {};
@@ -212,6 +219,9 @@ static void LoadEosConfig()
     // [EOS] VerboseLog=1 -> full EOS SDK verbose log. Off by default; we still
     // surface warnings+errors so real failures are visible without the spam.
     g_Cfg.bVerboseLog  = GetPrivateProfileIntA("EOS", "VerboseLog", 0, ini) != 0;
+
+    // [EOS] NoPresence=1 -> force non-presence lobbies (see field comment).
+    g_Cfg.bNoPresence  = GetPrivateProfileIntA("EOS", "NoPresence", 0, ini) != 0;
 
     g_Cfg.bValid = g_Cfg.ProductId[0] && g_Cfg.SandboxId[0] && g_Cfg.DeploymentId[0] &&
                    g_Cfg.ClientId[0] && g_Cfg.ClientSecret[0];
@@ -384,6 +394,64 @@ static void DumpEosOptions(const uint8_t* p)
 }
 
 // ------------------------------------------------------------
+// [EOS] NoPresence, part 2 -- disable the EOS Integrated Platform.
+//
+// Presence-off on the lobby (part 1) is not enough for a Steam<->EOS integrated
+// game (StarRupture): even a non-presence CreateLobby still consults the
+// Integrated Platform's identity, which validates that the local user is a real
+// linked platform (Steam) user. Our anonymous Device ID PUID has no linked Steam
+// account, so:
+//   LogEOSIntegratedPlatform  ValidateUserPlatformLoginStatus() Specified local user ... is invalid.
+//   LogEOSLobby               Cannot create Lobby, user permissions do not allow it.
+//
+// EOS_Platform_Options documents the fix directly: setting
+// IntegratedPlatformOptionsContainerHandle to NULL disables the integrated
+// platform for the host, which removes that identity validation. We NULL it in
+// place before EOS_Platform_Create runs.
+//
+// Offset (x64): the handle sits at +120 in EOS_Platform_Options and is stable for
+// platform-options ApiVersion >= 12 (the version that introduced the field); the
+// preceding fields are unchanged since then. We only touch it once the id fields
+// at +16/+80 prove this is the genuine Epic layout.
+//   ApiVersion(0) Reserved(8) ProductId(16) SandboxId(24) ClientCredentials(32,40)
+//   bIsServer(48) EncryptionKey(56) OverrideCountryCode(64) OverrideLocaleCode(72)
+//   DeploymentId(80) Flags(88) CacheDirectory(96) TickBudget(104) RTCOptions(112)
+//   IntegratedPlatformOptionsContainerHandle(120)
+// ------------------------------------------------------------
+static const size_t EOS_PLATFORM_IPCONTAINER_OFFSET = 120;
+
+static void StripIntegratedPlatform(const void* Options)
+{
+    if (!Options) return;
+    uint8_t* p = (uint8_t*)Options;
+    if (!IsReadable(p, EOS_PLATFORM_IPCONTAINER_OFFSET + sizeof(void*))) {
+        LOG("[EOSAuth] NoPresence: platform options not readable -- not stripping integrated platform.");
+        return;
+    }
+    int32_t apiver = *(const int32_t*)p;
+    if (apiver < 12) {
+        LOG("[EOSAuth] NoPresence: platform ApiVersion=%d < 12 has no integrated-platform field -- nothing to strip.", apiver);
+        return;
+    }
+    // Prove the genuine Epic layout before writing at +120 (same fingerprint the
+    // redirect path uses): real EOS ids at their expected offsets.
+    const char** ppProductId    = (const char**)(p + 16);
+    const char** ppDeploymentId = (const char**)(p + 80);
+    if (!LooksLikeEosId(*ppProductId) || !LooksLikeEosId(*ppDeploymentId)) {
+        LOG("[EOSAuth] NoPresence: platform options don't match the Epic layout -- NOT stripping integrated platform.");
+        return;
+    }
+    void** ppIP = (void**)(p + EOS_PLATFORM_IPCONTAINER_OFFSET);
+    if (*ppIP) {
+        LOG("[EOSAuth] NoPresence: disabling EOS Integrated Platform (container was %p) so the "
+            "anonymous Device ID user isn't rejected by platform-login validation.", *ppIP);
+        *ppIP = nullptr;   // SDK: NULL == integrated platform disabled for the host
+    } else {
+        LOG("[EOSAuth] NoPresence: integrated platform already disabled (container null).");
+    }
+}
+
+// ------------------------------------------------------------
 // Hooked EOS_Platform_Create -- rewrite the product/sandbox/deployment/
 // client ids the game initializes with to point at OUR Epic app.
 // ------------------------------------------------------------
@@ -404,6 +472,13 @@ static EOS_HPlatform __cdecl Hooked_Platform_Create(const void* Options)
             LOG("[EOSAuth] EOS_Logging_SetCallback not exported -- SDK internals stay invisible.");
         }
     }
+
+    // [EOS] NoPresence, part 2: disable the integrated platform (Steam<->EOS
+    // identity bridge) so it doesn't reject the anonymous Device ID user during
+    // lobby creation. Done here, before either mode's path, so it applies whether
+    // we redirect or KeepGameApp. Self-validates the layout before writing.
+    if (g_Cfg.bNoPresence)
+        StripIntegratedPlatform(Options);
 
     // KeepGameApp: skip the redirect entirely -- keep the game's OWN Epic app and
     // only anonymise the login (Device ID). Checked BEFORE the app ids so it wins
@@ -665,6 +740,103 @@ static void __cdecl Hooked_Connect_Login(EOS_HConnect Handle, const void* Option
 }
 
 // ------------------------------------------------------------
+// [EOS] NoPresence -- force non-presence lobbies.
+//
+// Some Steam+EOS games (StarRupture) create PRESENCE-enabled EOS lobbies.
+// Presence is an EPIC-ACCOUNT concept: it lets the Social Overlay advertise
+// "Join Game" through the user's Epic social graph and the integrated (Steam)
+// platform. Our anonymous Device ID login is Connect-ONLY -- it yields a
+// ProductUserId but no Epic account and no linked external account -- so the SDK
+// refuses to advertise presence and then refuses the lobby outright:
+//   LogEOSLobby            Lobby will be created, but user lacks permission to advertise presence.
+//   LogEOSIntegratedPlatform  ValidateUserPlatformLoginStatus() Specified local user ... is invalid.
+//   LogEOSLobby            Cannot create Lobby, user permissions do not allow it.
+//
+// Forcing bPresenceEnabled=false drops the lobby off the presence / integrated-
+// platform path, so a Connect-only user can create and join it. Trade-off: the
+// Steam "Join Game" overlay is presence-driven, so with presence off joining may
+// rely on the game's own in-game invite / lobby-code flow instead.
+//
+// bPresenceEnabled sits at +24 (x64) in ALL of CreateLobby / JoinLobby /
+// JoinLobbyById options, and every field ahead of it exists since each struct's
+// v1, so the offset is version-robust for any ApiVersion >= 2:
+//   CreateLobby:    ApiVersion(0) LocalUserId(8) MaxLobbyMembers(16) PermissionLevel(20) bPresenceEnabled(24)
+//   JoinLobby:      ApiVersion(0) LobbyDetailsHandle(8) LocalUserId(16) bPresenceEnabled(24)
+//   JoinLobbyById:  ApiVersion(0) LobbyId(8) LocalUserId(16) bPresenceEnabled(24)
+// ------------------------------------------------------------
+static const size_t EOS_LOBBY_PRESENCE_OFFSET = 24;
+
+typedef void (__cdecl* Fn_EOS_Lobby_Op)(void* Handle, const void* Options,
+                                        void* ClientData, void* CompletionDelegate);
+static Fn_EOS_Lobby_Op g_orig_CreateLobby   = nullptr;
+static Fn_EOS_Lobby_Op g_orig_JoinLobby     = nullptr;
+static Fn_EOS_Lobby_Op g_orig_JoinLobbyById = nullptr;
+
+// Zero bPresenceEnabled in a lobby options struct, after proving the layout so we
+// never write into an unexpected struct (an EOS emulator / a future SDK reorder).
+static void ForcePresenceOff(const void* Options, const char* which)
+{
+    if (!Options) return;
+    uint8_t* p = (uint8_t*)Options;   // writable: the game's own options block
+    if (!IsReadable(p, EOS_LOBBY_PRESENCE_OFFSET + sizeof(int32_t))) {
+        LOG("[EOSAuth] %s: options not readable -- leaving presence untouched.", which);
+        return;
+    }
+    int32_t  apiver    = *(const int32_t*)p;
+    int32_t* pPresence = (int32_t*)(p + EOS_LOBBY_PRESENCE_OFFSET);
+    // Sanity: a plausible ApiVersion and a real EOS_Bool (0/1) currently at +24.
+    if (apiver < 1 || apiver > 64 || (*pPresence != 0 && *pPresence != 1)) {
+        LOG("[EOSAuth] %s: unexpected layout (ApiVersion=%d, presence=%d) -- NOT touching it.",
+            which, apiver, *pPresence);
+        return;
+    }
+    if (*pPresence != 0) {
+        *pPresence = 0;   // EOS_FALSE
+        LOG("[EOSAuth] %s: forced bPresenceEnabled=false (NoPresence).", which);
+    }
+    // Already false -> nothing to do, stay silent (avoids per-call spam).
+}
+
+static void __cdecl Hooked_CreateLobby(void* H, const void* O, void* CD, void* CB)
+{
+    ForcePresenceOff(O, "EOS_Lobby_CreateLobby");
+    if (g_orig_CreateLobby) g_orig_CreateLobby(H, O, CD, CB);
+}
+static void __cdecl Hooked_JoinLobby(void* H, const void* O, void* CD, void* CB)
+{
+    ForcePresenceOff(O, "EOS_Lobby_JoinLobby");
+    if (g_orig_JoinLobby) g_orig_JoinLobby(H, O, CD, CB);
+}
+static void __cdecl Hooked_JoinLobbyById(void* H, const void* O, void* CD, void* CB)
+{
+    ForcePresenceOff(O, "EOS_Lobby_JoinLobbyById");
+    if (g_orig_JoinLobbyById) g_orig_JoinLobbyById(H, O, CD, CB);
+}
+
+// Install the three lobby hooks (only when [EOS] NoPresence is set). Any that the
+// SDK doesn't export are simply skipped.
+static void InstallNoPresenceHooks(HMODULE hEos)
+{
+    struct { const char* name; Fn_EOS_Lobby_Op hook; Fn_EOS_Lobby_Op* orig; } lobbies[] = {
+        { "EOS_Lobby_CreateLobby",   &Hooked_CreateLobby,   &g_orig_CreateLobby },
+        { "EOS_Lobby_JoinLobby",     &Hooked_JoinLobby,     &g_orig_JoinLobby },
+        { "EOS_Lobby_JoinLobbyById", &Hooked_JoinLobbyById, &g_orig_JoinLobbyById },
+    };
+    int hooked = 0;
+    for (auto& L : lobbies) {
+        void* pfn = (void*)GetProcAddress(hEos, L.name);
+        if (!pfn) { LOG("[EOSAuth] NoPresence: %s not exported -- skipping.", L.name); continue; }
+        if (MH_CreateHook(pfn, (void*)L.hook, (void**)L.orig) == MH_OK &&
+            MH_EnableHook(pfn) == MH_OK)
+            ++hooked;
+        else
+            LOG("[EOSAuth] NoPresence: hook %s failed.", L.name);
+    }
+    LOG("[EOSAuth] NoPresence armed: %d/3 lobby entry points hooked "
+        "(forcing bPresenceEnabled=false).", hooked);
+}
+
+// ------------------------------------------------------------
 // Locating the EOS SDK.
 //
 // "EOSSDK-Win64-Shipping.dll" is only the Redpoint/UE convention.
@@ -874,6 +1046,12 @@ static bool InstallHooksLocked()
     else
         LOG("[EOSAuth] hook EOS_Connect_Login failed");
 
+    // [EOS] NoPresence: also hook the lobby create/join entry points so we can
+    // force bPresenceEnabled=false (for games whose lobbies demand presence, which
+    // an anonymous Device ID login can't advertise).
+    if (g_Cfg.bNoPresence)
+        InstallNoPresenceHooks(hEos);
+
     InterlockedExchange(&g_bEosHooked, 1);
     LOG("[EOSAuth] hooks installed in %s (Platform_Create @ %p, Connect_Login @ %p).",
         eosName[0] ? eosName : "(unnamed module)", pPlatformCreate, pConnectLogin);
@@ -962,6 +1140,9 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD reason, LPVOID)
             g_Cfg.ProductId[0] ? g_Cfg.ProductId : "(unset)",
             g_Cfg.ClientId[0]  ? g_Cfg.ClientId  : "(unset)",
             g_Cfg.DisplayName);
+        if (g_Cfg.bKeepGameApp || g_Cfg.bNoPresence)
+            LOG("[EOSAuth] DllMain -- flags: KeepGameApp=%d NoPresence=%d.",
+                g_Cfg.bKeepGameApp ? 1 : 0, g_Cfg.bNoPresence ? 1 : 0);
         // Arm the LoadLibrary trap RIGHT HERE, synchronously. Forever Skies
         // 1.17.1 dynamic-loads the EOS SDK and creates the platform ~400ms into
         // startup -- earlier than a freshly-CreateThread'd watcher can even get
