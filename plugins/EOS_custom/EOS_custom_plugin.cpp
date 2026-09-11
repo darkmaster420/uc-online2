@@ -58,6 +58,7 @@
 
 #include "../../include/MinHook.h"
 #include "../../include/uco_plugin.h"
+#include "eos_baked_creds.h"   // default Epic app creds (baked at release; empty in source)
 
 // ------------------------------------------------------------
 // Minimal EOS types (SDK 1.15.x). Only the fields we read or rewrite.
@@ -191,6 +192,8 @@ struct EosConfig
                             //   2. NULL the platform's IntegratedPlatformOptionsContainer
                             //      (the SDK's documented off switch) so the Steam<->EOS
                             //      identity validation doesn't reject the anon user.
+    bool bUsingBaked;       // true when the redirect creds came from the baked-in
+                            // default Epic app rather than the user's own ini block.
     bool bValid;
 };
 static EosConfig g_Cfg = {};
@@ -222,6 +225,22 @@ static void LoadEosConfig()
 
     // [EOS] NoPresence=1 -> force non-presence lobbies (see field comment).
     g_Cfg.bNoPresence  = GetPrivateProfileIntA("EOS", "NoPresence", 0, ini) != 0;
+
+    // Own-app override vs baked default. If the user filled a COMPLETE [EOS] redirect
+    // block, use it (bring-your-own Epic app). Otherwise fall back to the creds baked
+    // into this DLL at release time (the project's default Epic app) so the redirect
+    // works with no Epic app of your own. All-or-nothing: a partial ini block does NOT
+    // get mixed with baked creds -- we take the full baked set instead.
+    bool iniComplete = g_Cfg.ProductId[0] && g_Cfg.SandboxId[0] && g_Cfg.DeploymentId[0] &&
+                       g_Cfg.ClientId[0] && g_Cfg.ClientSecret[0];
+    if (!iniComplete && UCO_EOS_BAKED_PRODUCTID[0] && UCO_EOS_BAKED_CLIENTSECRET[0]) {
+        strncpy_s(g_Cfg.ProductId,    UCO_EOS_BAKED_PRODUCTID,    _TRUNCATE);
+        strncpy_s(g_Cfg.SandboxId,    UCO_EOS_BAKED_SANDBOXID,    _TRUNCATE);
+        strncpy_s(g_Cfg.DeploymentId, UCO_EOS_BAKED_DEPLOYMENTID, _TRUNCATE);
+        strncpy_s(g_Cfg.ClientId,     UCO_EOS_BAKED_CLIENTID,     _TRUNCATE);
+        strncpy_s(g_Cfg.ClientSecret, UCO_EOS_BAKED_CLIENTSECRET, _TRUNCATE);
+        g_Cfg.bUsingBaked = true;
+    }
 
     g_Cfg.bValid = g_Cfg.ProductId[0] && g_Cfg.SandboxId[0] && g_Cfg.DeploymentId[0] &&
                    g_Cfg.ClientId[0] && g_Cfg.ClientSecret[0];
@@ -1136,7 +1155,8 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD reason, LPVOID)
         // startup, before UCO_PluginInit would ever run.
         LoadEosConfig();
         LOG("[EOSAuth] DllMain -- config %s (Product=%s Client=%s DisplayName=%s); watching for EOS SDK.",
-            g_Cfg.bValid ? "OK" : "INCOMPLETE (see [EOS] in union-crax.ini)",
+            g_Cfg.bValid ? (g_Cfg.bUsingBaked ? "OK (baked-in default Epic app)" : "OK (your own Epic app from ini)")
+                         : "INCOMPLETE (no ini creds and no baked default -- set [EOS] in union-crax.ini)",
             g_Cfg.ProductId[0] ? g_Cfg.ProductId : "(unset)",
             g_Cfg.ClientId[0]  ? g_Cfg.ClientId  : "(unset)",
             g_Cfg.DisplayName);

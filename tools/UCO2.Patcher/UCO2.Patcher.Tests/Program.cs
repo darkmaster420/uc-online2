@@ -211,10 +211,17 @@ internal static class Program
             InstallPlayFab = true
         };
         IReadOnlyList<MissingBackendSettings> missing = BackendSettingsValidator.FindMissing(game, selected);
-        Equal(3, missing.Count, "All selected backends require settings");
+        // EOS creds are optional now (blank -> baked-in default app), so only
+        // Photon + PlayFab are missing here.
+        Equal(2, missing.Count, "Photon+PlayFab require settings; EOS is optional");
         True(missing.Any(item => item.Backend == "Photon"), "Photon requirement");
-        True(missing.Any(item => item.Backend == "EOS"), "EOS requirement");
+        True(!missing.Any(item => item.Backend == "EOS"), "Blank EOS is not required (built-in default)");
         True(missing.Any(item => item.Backend == "PlayFab"), "PlayFab requirement");
+
+        // A PARTIAL EOS own-app block IS flagged (plugin ignores it -> default).
+        var partialEos = new PatchOptions { InstallEos = true, EosProductId = "abc" };
+        True(BackendSettingsValidator.FindMissing(game, partialEos).Any(item => item.Backend == "EOS"),
+            "Partial EOS block is flagged");
 
         var disabled = new PatchOptions();
         Equal(0, BackendSettingsValidator.FindMissing(game, disabled).Count, "Disabled backends require no settings");
@@ -262,11 +269,18 @@ internal static class Program
 
         var planner = new PatchPlanner(new ArtifactLocator(artifactRoot));
 
-        // EOS selected, no credentials, redirect mode -> warn and skip the plugin.
+        // EOS selected, NO credentials -> plugin installs (uses the baked-in default
+        // Epic app) with no warning.
         var bare = new PatchOptions { OriginalAppId = 123, InstallOverlayProxy = false, InstallEos = true };
-        PatchPlan incomplete = planner.Create(FakeGame(gameRoot), bare);
-        True(incomplete.Warnings.Any(warning => warning.Contains("credentials are incomplete", StringComparison.Ordinal)), "Incomplete EOS credentials warning");
-        True(!incomplete.Operations.Any(operation => operation.Description.Contains("EOS_custom", StringComparison.Ordinal)), "Incomplete EOS credentials skips plugin");
+        PatchPlan bareplan = planner.Create(FakeGame(gameRoot), bare);
+        True(bareplan.Operations.Any(operation => operation.Description.Contains("EOS_custom", StringComparison.Ordinal)), "No-cred EOS installs the plugin (baked default)");
+        True(!bareplan.Warnings.Any(warning => warning.Contains("incomplete", StringComparison.Ordinal)), "No-cred EOS raises no incomplete warning");
+
+        // A PARTIAL own-app block -> plugin still installs, but warns it will be ignored.
+        var partial = new PatchOptions { OriginalAppId = 123, InstallOverlayProxy = false, InstallEos = true, EosProductId = "p" };
+        PatchPlan partialPlan = planner.Create(FakeGame(gameRoot), partial);
+        True(partialPlan.Operations.Any(operation => operation.Description.Contains("EOS_custom", StringComparison.Ordinal)), "Partial EOS still installs the plugin");
+        True(partialPlan.Warnings.Any(warning => warning.Contains("incomplete", StringComparison.Ordinal)), "Partial EOS warns it will use the default");
 
         // KeepGameApp anon-logs into the game's own Epic app, so the plugin must be
         // installed WITHOUT redirect credentials and without a warning. (regression

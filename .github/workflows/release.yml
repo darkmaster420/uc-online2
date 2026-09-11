@@ -53,6 +53,38 @@ jobs:
             Write-Host "Non-tag build ($ref); keeping committed include/version.h"
           }
 
+      - name: Stamp EOS default app creds from secrets
+        shell: pwsh
+        env:
+          EOS_PRODUCT_ID:    ${{ secrets.EOS_PRODUCT_ID }}
+          EOS_SANDBOX_ID:    ${{ secrets.EOS_SANDBOX_ID }}
+          EOS_DEPLOYMENT_ID: ${{ secrets.EOS_DEPLOYMENT_ID }}
+          EOS_CLIENT_ID:     ${{ secrets.EOS_CLIENT_ID }}
+          EOS_CLIENT_SECRET: ${{ secrets.EOS_CLIENT_SECRET }}
+        run: |
+          # Bake the project's DEFAULT Epic app into EOS_custom.dll so the redirect
+          # works with no Epic app of the user's own. Regenerates the committed
+          # (empty) plugins/EOS_custom/eos_baked_creds.h. Empty secrets (forks / PRs
+          # without access) keep the empty placeholders = ini-only, no behavior
+          # change. A user's own COMPLETE [EOS] block in union-crax.ini still
+          # overrides these at runtime (see LoadEosConfig).
+          if ($env:EOS_PRODUCT_ID -and $env:EOS_CLIENT_SECRET) {
+            $lines = @(
+              '#ifndef UCO_EOS_BAKED_CREDS_H',
+              '#define UCO_EOS_BAKED_CREDS_H',
+              "#define UCO_EOS_BAKED_PRODUCTID    ""$env:EOS_PRODUCT_ID""",
+              "#define UCO_EOS_BAKED_SANDBOXID    ""$env:EOS_SANDBOX_ID""",
+              "#define UCO_EOS_BAKED_DEPLOYMENTID ""$env:EOS_DEPLOYMENT_ID""",
+              "#define UCO_EOS_BAKED_CLIENTID     ""$env:EOS_CLIENT_ID""",
+              "#define UCO_EOS_BAKED_CLIENTSECRET ""$env:EOS_CLIENT_SECRET""",
+              '#endif'
+            )
+            Set-Content -LiteralPath plugins/EOS_custom/eos_baked_creds.h -Value $lines -Encoding ASCII
+            Write-Host "Baked EOS default app creds (Product=$($env:EOS_PRODUCT_ID))"
+          } else {
+            Write-Host "EOS_* secrets not set; keeping empty placeholders (ini-only build)"
+          }
+
       - name: Build x86 version (steam_api.dll)
         run: msbuild uc_online2.vcxproj -p:Configuration=Release -p:Platform=Win32 -m
 

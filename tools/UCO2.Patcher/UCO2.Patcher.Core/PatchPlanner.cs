@@ -50,16 +50,17 @@ public sealed class PatchPlanner(ArtifactLocator artifacts)
             if (options.InstallPhoton) AddPlugin("photon_universal", game, operations);
             if (options.InstallEos)
             {
-                // KeepGameApp anon-logs into the game's OWN Epic app, so it needs
-                // no redirect credentials -- but it still needs the plugin present
-                // to do that login. Only the redirect path requires all five ids.
-                bool complete = !string.IsNullOrWhiteSpace(options.EosProductId)
-                    && !string.IsNullOrWhiteSpace(options.EosSandboxId)
-                    && !string.IsNullOrWhiteSpace(options.EosDeploymentId)
-                    && !string.IsNullOrWhiteSpace(options.EosClientId)
-                    && !string.IsNullOrWhiteSpace(options.EosClientSecret);
-                if (options.EosKeepGameApp || complete) AddPlugin("EOS_custom", game, operations);
-                else warnings.Add("EOS was selected but its credentials are incomplete, so EOS_custom will not be installed. (Enable KeepGameApp to run on the game's own Epic app without them.)");
+                // EOS_custom is always installed when EOS is selected. With no ini
+                // credentials it redirects to the Epic app baked into the DLL at
+                // release ("just works"); a COMPLETE [EOS] block overrides that with
+                // your own app, and KeepGameApp overrides both (game's own app, no
+                // redirect). Only warn on a PARTIAL own-app block, which the plugin
+                // ignores in favour of the baked default.
+                AddPlugin("EOS_custom", game, operations);
+                int filled = new[] { options.EosProductId, options.EosSandboxId, options.EosDeploymentId,
+                    options.EosClientId, options.EosClientSecret }.Count(v => !string.IsNullOrWhiteSpace(v));
+                if (!options.EosKeepGameApp && filled > 0 && filled < 5)
+                    warnings.Add("EOS: your Epic app block is incomplete, so EOS_custom will ignore it and use the built-in default app. Fill all five ids to use your own app, or clear them.");
             }
             if (options.InstallPlayFab)
             {

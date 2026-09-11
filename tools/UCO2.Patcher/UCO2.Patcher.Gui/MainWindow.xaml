@@ -170,7 +170,7 @@
                                     <Border x:Name="EosCredsGroup" Background="{StaticResource PanelAltBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="13,12" Margin="0,0,0,10">
                                         <StackPanel>
                                             <Grid Margin="0,0,0,8">
-                                                <TextBlock Text="EOS &#x2014; EPIC APP CREDENTIALS" Foreground="{StaticResource MutedBrush}" FontSize="11" FontWeight="Bold" />
+                                                <TextBlock Text="EOS &#x2014; EPIC APP (OPTIONAL)" Foreground="{StaticResource MutedBrush}" FontSize="11" FontWeight="Bold" />
                                                 <Border x:Name="EosRequiredBadge" HorizontalAlignment="Right" Background="{StaticResource WarnBgBrush}" BorderBrush="{StaticResource WarnBrush}" BorderThickness="1" Padding="7,1" Visibility="Collapsed">
                                                     <TextBlock Text="REQUIRED" Foreground="{StaticResource WarnBrush}" FontSize="10" FontWeight="Bold" />
                                                 </Border>
@@ -178,6 +178,8 @@
                                             <ToggleButton x:Name="EosKeepGameAppCheck" Style="{StaticResource OptionToggle}" Margin="0,0,0,10"
                                                           Content="Use the game's own Epic app &#x2014; Device ID login, no redirect (no credentials needed)"
                                                           Click="BackendCheck_Toggled" />
+                                            <TextBlock Text="Leave the fields below blank to use the built-in default Epic app. Fill all five only to redirect to your own app instead."
+                                                       Foreground="{StaticResource MutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10" />
                                             <Grid>
                                                 <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                                 <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>

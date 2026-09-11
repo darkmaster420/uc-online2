@@ -32,7 +32,7 @@ At init the plugin detects the Unity backend (Mono vs IL2CPP) by which runtime D
 Photon-backed games normally authenticate with a Steam ticket validated against the *developer's* publisher key — which you don't have. The fix has two parts:
 
 1. **Redirect the game to a Photon app you control** by rewriting the Photon AppId GUID on the wire at runtime (no asset patching needed — see below).
-2. **Point that Photon app at a permissive Custom Authentication URL** (a Cloudflare Worker that always replies success), and force the wire-time auth type to `Custom`.
+2. **Point that Photon app at a permissive Custom Authentication URL** — use the shared **`https://photon.iforgor.cc`** (a hosted endpoint that always replies success; nothing to deploy), and force the wire-time auth type to `Custom`.
 
 Both Photon's master/NameServer then accept the client without a real publisher key.
 
@@ -40,7 +40,7 @@ Both Photon's master/NameServer then accept the client without a real publisher 
 
 Setup is asset-patch-free — the plugin reads everything from `union-crax.ini` and rewrites AppIds on the wire at runtime, so you never modify the game's `resources.assets`.
 
-> **Shortcut:** the repo-root **`patch.bat`** automates the DLL + ini steps. Drop a game folder onto it (or run `patch.bat "C:\path\to\game"`); it detects whether the game uses Photon (Realtime/PUN or Fusion, Mono or IL2CPP, and whether it ships Voice), prompts for the real Steam AppId and your Photon GUID(s), writes `union-crax.ini` with the right section, and copies `photon_universal.dll` into `<game>\plugins\`. Non-Photon games are detected and skipped with no changes. You still create the Photon app(s) + Cloudflare Worker (steps 1–2 below) and drop in UCOnline2's `steam_api64.dll` yourself.
+> **Shortcut:** the repo-root **`patch.bat`** automates the DLL + ini steps. Drop a game folder onto it (or run `patch.bat "C:\path\to\game"`); it detects whether the game uses Photon (Realtime/PUN or Fusion, Mono or IL2CPP, and whether it ships Voice), prompts for the real Steam AppId and your Photon GUID(s), writes `union-crax.ini` with the right section, and copies `photon_universal.dll` into `<game>\plugins\`. Non-Photon games are detected and skipped with no changes. You still create the Photon app(s) and point their Custom Auth at `https://photon.iforgor.cc` (steps 1–2 below), and drop in UCOnline2's `steam_api64.dll` yourself.
 
 ### 1. Create your Photon app(s)
 
@@ -51,11 +51,23 @@ At <https://dashboard.photonengine.com/> (free, no card):
 
 Copy each app's **AppId** GUID (e.g. `4ff936cd-afb9-486b-b8e3-6ab23d915af0`).
 
-### 2. Add a permissive auth backend to each app
+### 2. Point each app at the shared Custom Auth URL
 
-On each Photon app: **Manage → Authentication → Add Provider → Custom**. Paste a Cloudflare Worker URL that always returns success, leave the mandatory key/value pairs empty, and **uncheck "Reject Clients on Authentication Failure"**. Save.
+On each Photon app you created (Realtime, Voice, Fusion — whichever apply):
+**Manage → Authentication → Add Provider → Custom**, set the URL to
 
-Worker code:
+```
+https://photon.iforgor.cc
+```
+
+leave the mandatory key/value pairs empty, and **uncheck "Reject Clients on Authentication Failure"**. Save.
+
+That's it — **you don't need to host anything.** `photon.iforgor.cc` is a shared, permissive endpoint that approves every request and echoes the player's Steam name back as the `Nickname` (see "Player display name" below). It knows nothing about which Photon app points at it, so it works for anyone's app.
+
+<details>
+<summary>Prefer to self-host the auth endpoint?</summary>
+
+Deploy this to <https://workers.cloudflare.com>, then use your own `https://….workers.dev` URL in place of `photon.iforgor.cc`:
 
 ```js
 export default {
@@ -72,8 +84,7 @@ export default {
   }
 };
 ```
-
-Deploy at <https://workers.cloudflare.com>, copy the resulting `https://….workers.dev` URL, and paste it into **every** Photon app you created (Realtime, Voice, Fusion — whichever apply).
+</details>
 
 ### 3. Deploy the DLL
 
