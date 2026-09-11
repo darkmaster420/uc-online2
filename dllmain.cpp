@@ -92,6 +92,7 @@ SRWLOCK g_CallbackLock;
 uint32 g_ForcedAppId = 480;
 uint32 g_OriginalAppId = 0;
 uint32 g_SteamNetworkingAppId = 0;
+bool   g_bRealAppIdEnv = false;   // [Settings] RealAppIdEnv: expose ogAppId in the SteamAppId env for a game's startup AppId check
 // [Settings] EmulateTicket -- also gates auth-session-ticket emulation
 // (see the ISteamUser hooks further down).
 static bool g_bEmulateAuthTicket = false;
@@ -510,6 +511,13 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 				UCOLOG("[UCOnline2] SDR=yes ignored: ogAppId is required");
 		}
 
+		g_bRealAppIdEnv = s_PluginLoader.GetRealAppIdEnv();
+		if (g_bRealAppIdEnv && g_OriginalAppId == 0)
+		{
+			UCOLOG("[UCOnline2] RealAppIdEnv=yes ignored: ogAppId is required");
+			g_bRealAppIdEnv = false;
+		}
+
 		s_PluginLoader.GetClientVersion(g_LegacyClientVersion, sizeof(g_LegacyClientVersion));
 		if (g_LegacyClientVersion[0])
 			UCOLOG("[UCOnline2] SteamClient() accessor will be pinned to %s", g_LegacyClientVersion);
@@ -524,6 +532,19 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 			LoadGameOverlay();
 		else
 			UCOLOG("[UCOnline2] LoadOverlay=no -- not loading GameOverlayRenderer");
+
+		// [Settings] RealAppIdEnv: some games read the SteamAppId ENV at startup and
+		// quit if it isn't their real AppId (Valheim's SteamManager: "Invalid APPID"
+		// -> Application.Quit(), BEFORE it ever calls SteamAPI_Init). Expose ogAppId in
+		// the env now for that early read; SteamAPI_Init re-stamps the forced (spoof)
+		// id before it connects to Steam, so ownership still rides the free AppId. Done
+		// AFTER the overlay load so the overlay/relay context stays on the forced id.
+		if (g_bRealAppIdEnv)
+		{
+			SetSteamAppEnvironment(g_OriginalAppId);
+			UCOLOG("[UCOnline2] RealAppIdEnv: SteamAppId env -> %u for the game's startup "
+				"check (the Steam connection still uses %u)", g_OriginalAppId, g_ForcedAppId);
+		}
 
 		char dllPath[MAX_PATH] = { 0 };
 		DWORD len = GetModuleFileNameA(hModule, dllPath, sizeof(dllPath));

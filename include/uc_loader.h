@@ -145,6 +145,20 @@ uint32 GetOgAppId()
 		return IniReadBool("SDR", false);
 	}
 
+	// [Settings] RealAppIdEnv=true -- expose ogAppId in the SteamAppId/SteamGameId
+	// environment variables for games that read that env at startup and refuse to
+	// run if it isn't their real AppId (e.g. Valheim's SteamManager: "Invalid APPID"
+	// -> Application.Quit(), checked BEFORE it calls SteamAPI_Init). The Steam
+	// connection itself still uses the forced (spoof) AppId, so ownership rides the
+	// free app. Needs ogAppId set.
+	bool GetRealAppIdEnv()
+	{
+		if (m_IniPath[0] == '\0')
+			return false;
+
+		return IniReadBool("RealAppIdEnv", false);
+	}
+
 	std::vector<uint32> GetUnlockDLCAppIds()
 	{
 		std::vector<uint32> appIds;
