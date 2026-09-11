@@ -18,14 +18,11 @@ Custom modified Steam API .dll for Steam games to spoof your game as Spacewar. D
 
 ## Quick start
 
-**Run `UCO2.Patcher.exe` or drag your game folder onto `patch.bat`.** Release
-packages include a folder-first GUI **(experimental)** that searches the folder
-name on Steam for the game AppId, plus preflight detection, large option toggles,
-a final review, verified backup snapshots, one-click restore, installed-fix
-updates and path-preserving fix ZIP packaging.
-
-`patch.bat` asks whether to use the new GUI or the original interactive flow.
-Use `patch.bat /gui` or `patch.bat /legacy` to choose directly.
+**Run `UCO2.Patcher.exe`** — the release package's folder-first GUI
+**(experimental)**. Point it at a game folder (or drag the folder onto it): it
+searches the folder name on Steam for the game AppId, then offers preflight
+detection, large option toggles, a final review, verified backup snapshots,
+one-click restore, installed-fix updates and path-preserving fix ZIP packaging.
 
 It will:
 
@@ -42,17 +39,19 @@ It will:
 Everything third-party stays yours: it never invents a Photon GUID, an Epic app
 or a coherence project.
 
-```
-patch.bat "C:\Games\SomeGame"            full setup
-patch.bat "C:\Games\SomeGame" /keyonly   coherence runtime key only, nothing else
-```
+> **Working from a clone?** The repo still carries `patch.bat`, the original
+> interactive CLI (`patch.bat "C:\Games\SomeGame"`, or append `/keyonly` for just a
+> coherence runtime key). It is **no longer shipped in release packages** — the GUI
+> is the supported path — but remains for people building from source
+> (`patch.bat /legacy` forces the interactive flow, `/gui` launches the GUI).
 
 **What it will not do:**
 
 - Install into a 32-bit game. It refuses rather than writing an x64 DLL where it
   cannot load.
-- Deploy `EOS_custom` until you supply an Epic app — an inert plugin only adds a
-  variable while you are working out whether co-op runs over plain Steam.
+- Redirect EOS to *your own* Epic app unless you fill the `[EOS]` fields — by
+  default `EOS_custom` uses the Epic app built into the DLL, so EOS co-op works
+  with no setup (see [plugins/EOS_custom](plugins/EOS_custom/README.md)).
 - Upload a coherence schema. That needs the Unity editor; see
   [`tools/coherence_schema`](tools/coherence_schema/README.md).
 
@@ -271,7 +270,7 @@ AppId into the networking context, which fails for accounts that don't own the g
 ### Overlay
 
 UCOnline2 pulls Steam's `GameOverlayRenderer` into the process so a
-directly-launched game still gets the overlay. `patch.bat` additionally deploys an
+directly-launched game still gets the overlay. The patcher additionally deploys an
 early proxy (`version.dll` / `winmm.dll`) for engines that load
 `steam_api64.dll` too late for the overlay to hook the swapchain — see
 [`plugins/steam_overlay`](plugins/steam_overlay/README.md).
@@ -306,7 +305,7 @@ it can pull `steam_api64` in ahead of time and arm those plugin hooks in advance
 LoadDLLsEarly=true
 ```
 
-`patch.bat` and the GUI patcher set this automatically whenever a plugin is
+The patcher sets this automatically whenever a plugin is
 deployed, so you rarely write it by hand. It's a no-op when `steam_api64` is
 already loaded (e.g. games that import it statically), so it's safe to leave on.
 The proxy's overlay renderer is separate and still honours
@@ -401,11 +400,14 @@ hooks, custom networking, IL2CPP patches — belongs in a plugin.
 
 A coherence game has to point at a coherence project that has its schema
 uploaded. Setting that up yourself means an account, the Unity editor and a
-schema upload — so patch.bat offers a shortcut.
+schema upload — so there's a shortcut: a shared community project.
 
-**Answer `SHARED` at the runtime-key prompt.** That points the game at a
-community project which already has the schema uploaded and every region
-enabled: no account, no Unity, nothing else to do.
+**Use the shared project's runtime key** `fce1ea692a854b50b9f945ef6aa17758` — paste
+it into the coherence runtime-key field in the GUI (or answer `SHARED` at the
+`patch.bat` CLI's runtime-key prompt, which fills in that same key). It points the
+game at a community project which already has the schema uploaded and every region
+enabled: no account, no Unity, nothing else to do. (A runtime key is a client-side
+identifier that ships in every coherence game, like a Photon AppId — safe to share.)
 
 It is a free tier, unmonitored, and shared with everyone else using it, so
 **availability is not guaranteed** — it may be rate-limited or rotated without

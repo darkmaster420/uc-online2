@@ -40,7 +40,7 @@ Both Photon's master/NameServer then accept the client without a real publisher 
 
 Setup is asset-patch-free — the plugin reads everything from `union-crax.ini` and rewrites AppIds on the wire at runtime, so you never modify the game's `resources.assets`.
 
-> **Shortcut:** the repo-root **`patch.bat`** automates the DLL + ini steps. Drop a game folder onto it (or run `patch.bat "C:\path\to\game"`); it detects whether the game uses Photon (Realtime/PUN or Fusion, Mono or IL2CPP, and whether it ships Voice), prompts for the real Steam AppId and your Photon GUID(s), writes `union-crax.ini` with the right section, and copies `photon_universal.dll` into `<game>\plugins\`. Non-Photon games are detected and skipped with no changes. You still create the Photon app(s) and point their Custom Auth at `https://photon.iforgor.cc` (steps 1–2 below), and drop in UCOnline2's `steam_api64.dll` yourself.
+> **Shortcut:** **`UCO2.Patcher.exe`** (the release GUI) automates the DLL + ini steps — point it at a game folder and it detects whether the game uses Photon (Realtime/PUN or Fusion, Mono or IL2CPP, and whether it ships Voice), prompts for the real Steam AppId and your Photon GUID(s), writes `union-crax.ini` with the right section, and copies `photon_universal.dll` into `<game>\plugins\`. Non-Photon games are detected and skipped. (The repo-root `patch.bat` CLI does the same from source.) You still create the Photon app(s) and point their Custom Auth at `https://photon.iforgor.cc` (steps 1–2 below), and drop in UCOnline2's `steam_api64.dll` yourself.
 
 ### 1. Create your Photon app(s)
 

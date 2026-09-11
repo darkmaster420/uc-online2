@@ -5,30 +5,33 @@ Gets past **coherence Cloud**'s platform login for games built on the
 
 ## Quick start — you probably do not need to read the rest of this
 
-**Drag the game folder onto `patch.bat`.** It detects coherence and does the
+**Point `UCO2.Patcher.exe` at the game folder.** It detects coherence and does the
 whole thing: deploys this plugin, writes the `[Coherence]` ini section, patches
-the runtime key into the game data, fills in the DLC section, and offers to run
-the schema upload tool first if you are bringing your own project.
+the runtime key into the game data, fills in the DLC section, and (when you bring
+your own project) can run the schema upload tool. (The repo `patch.bat` CLI does
+the same from source.)
 
-When it asks for a runtime key, answer:
+For the runtime key, use the shared community project's key:
 
 ```
-SHARED
+fce1ea692a854b50b9f945ef6aa17758
 ```
 
 and you are done — that uses a community project whose schema is already
 uploaded and whose regions are enabled. No coherence account, no Unity, no
-schema upload. Availability is not guaranteed; see
+schema upload. (In the `patch.bat` CLI you can answer `SHARED` instead and it
+fills that in.) Availability is not guaranteed; see
 [Shared project](#shared-project-no-setup).
 
-Already set up and just want to point a game at a different project?
+Already set up and just want to point a game at a different project? Change the
+runtime key and re-run the patcher, or use the CLI's key-only mode:
 
 ```
 patch.bat "C:\path\to\game" /keyonly
 ```
 
 Everything below is the manual route and the reasoning behind it — useful for a
-coherence game patch.bat has not been taught about, or when something has gone
+coherence game the patcher has not been taught about, or when something has gone
 wrong and you need to know what it was trying to do.
 
 ## Confirmed working
@@ -38,7 +41,7 @@ wrong and you need to know what it was trying to do.
 | **Vampire Survivors** (v1.15.114 / build 23591499) | 1794680 | coherence 1.6 (IL2CPP) | Lobby created on our own project, 2026-08-09. Each build has its **own schema** but the **same runtime key** — a game update changes the schema and leaves the key alone, so both builds live on one project. |
 | **Lost Skies** (build 23704476) | 1931180 | coherence (IL2CPP) | **Hosting** confirmed 2026-08-10; joining untested (needs 2 players). Uses coherence **RSL** — a host-local replication server + a **Steam lobby** for discovery, **not** Cloud rooms — so an empty coherence dashboard is expected, not a failure. |
 
-All need the runtime key patched into the game data, which `patch.bat` does.
+All need the runtime key patched into the game data, which the patcher does.
 
 ## The wall
 
@@ -115,7 +118,7 @@ offsets shift. Back up the file first.
 
 ### Doing it by hand
 
-`patch.bat` does all of this for you, including finding the key — this section
+The patcher does all of this for you, including finding the key — this section
 is for other coherence games, or for checking its work.
 
 **1. Find the game's current runtime key.** The easiest way is to let the plugin
@@ -175,8 +178,9 @@ runtime key: fce1ea692a854b50b9f945ef6aa17758
 ```
 
 Patch that into the game's `globalgamemanagers.assets` in place of the
-32-character key already there (see below) — or just answer `SHARED` when
-`patch.bat` asks for a runtime key, and it does this for you.
+32-character key already there (see below) — or just set it as the coherence
+runtime key in the patcher (the `patch.bat` CLI also accepts `SHARED` as a
+shorthand for it), and it does this for you.
 
 Schemas currently uploaded to it:
 
@@ -206,12 +210,12 @@ access to the project.
 
 ## Using your own coherence project
 
-`patch.bat` offers to run the schema upload tool before it asks for a key, which
+The patcher offers to run the schema upload tool before it asks for a key, which
 covers steps 2 and 3 below. The list is what it is doing on your behalf.
 
 1. Create a project; note its **runtime key**.
-2. Patch that key into the game data (above) — or just give the key to
-   `patch.bat`.
+2. Patch that key into the game data (above) — or just give the key to the
+   patcher.
 3. Upload the game's schema to your project. The Hub uploads
    `Toolkit.schema + Gathered.schema + activeSchemas + extraSchemas`, hashed as
    `sha1(string.Join("\n", contents))`. Since a shipped game's `combined.schema`

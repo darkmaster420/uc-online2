@@ -4,7 +4,8 @@ This is not a normal UCOnline2 plugin. It is a renameable system-DLL proxy
 that a game loads at process startup, before its graphics engine creates the
 swapchain. The build output is `overlay_proxy.dll`.
 
-`patch.bat` detects the engine and deploys it automatically:
+The patcher (`UCO2.Patcher.exe`, or the `patch.bat` CLI from source) detects the
+engine and deploys it automatically:
 
 - Unity: renamed to `version.dll` beside the game executable.
 - Unreal Engine: renamed to `winmm.dll` beside the real
@@ -45,7 +46,8 @@ deployed filename:
 
 ## Automatic Deployment
 
-Run the normal patcher against the game's top-level folder:
+Point `UCO2.Patcher.exe` at the game's top-level folder (or, from source, the
+`patch.bat` CLI):
 
 ```powershell
 patch.bat "C:\path\to\game"

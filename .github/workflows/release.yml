@@ -123,10 +123,9 @@ jobs:
             -p:InformationalVersion=${{ github.ref_name }} `
             -p:DebugType=None -o tools/UCO2.Patcher/publish
           if ($LASTEXITCODE -ne 0) { throw "GUI patcher publish failed" }
-          # The version is baked into the exe, but pre-1.20.3 updaters detect the
-          # release package by version.txt -- keep shipping it so existing installs
-          # can still auto-update. The exe (InformationalVersion) is authoritative.
-          Set-Content -LiteralPath tools/UCO2.Patcher/publish/version.txt -Value "${{ github.ref_name }}" -NoNewline
+          # No version.txt: the version is baked into the exe (InformationalVersion)
+          # and the updater reads the latest release from the GitHub API tag. Only
+          # pre-1.20.3 installs used a shipped version.txt; that shim is now retired.
 
       - name: Verify build outputs
         shell: pwsh
@@ -137,8 +136,7 @@ jobs:
             "debbuild/x86/steam_api.dll",
             "debbuild/x64/steam_api64.dll",
             "plugins/steam_overlay/relbuild/x64/overlay_proxy.dll",
-            "tools/UCO2.Patcher/publish/UCO2.Patcher.exe",
-            "tools/UCO2.Patcher/publish/version.txt"
+            "tools/UCO2.Patcher/publish/UCO2.Patcher.exe"
           )
 
           foreach ($file in $files) {
@@ -190,13 +188,7 @@ jobs:
             Where-Object { ($_.FullName -replace '\\','/') -match '/relbuild/x64/' } |
             ForEach-Object { Copy-Item $_.FullName "$packageRootrel/plugins/$($_.Name)" -Force }
 
-          # Photon auto-patcher. Only patch.bat goes at the package root -- it
-          # finds the DLL in plugins\ next to itself, so no duplicate copy.
-          if (Test-Path "patch.bat") {
-            Copy-Item "patch.bat" "$packageRootrel/patch.bat" -Force
-          }
           Copy-Item "tools/UCO2.Patcher/publish/UCO2.Patcher.exe" "$packageRootrel/UCO2.Patcher.exe" -Force
-          Copy-Item "tools/UCO2.Patcher/publish/version.txt" "$packageRootrel/version.txt" -Force
 
           # coherence schema pipeline. Needs the Unity editor, so it is a
           # separate opt-in tool rather than something patch.bat can run --
@@ -232,12 +224,7 @@ jobs:
             Where-Object { ($_.FullName -replace '\\','/') -match '/relbuild/x64/' } |
             ForEach-Object { Copy-Item $_.FullName "$packageRootdeb/plugins/$($_.Name)" -Force }
 
-          # Same auto-patcher as the release package.
-          if (Test-Path "patch.bat") {
-            Copy-Item "patch.bat" "$packageRootdeb/patch.bat" -Force
-          }
           Copy-Item "tools/UCO2.Patcher/publish/UCO2.Patcher.exe" "$packageRootdeb/UCO2.Patcher.exe" -Force
-          Copy-Item "tools/UCO2.Patcher/publish/version.txt" "$packageRootdeb/version.txt" -Force
 
           if (Test-Path $archivePathdeb) {
             Remove-Item $archivePathdeb -Force
