@@ -68,7 +68,26 @@ jobs:
           # without access) keep the empty placeholders = ini-only, no behavior
           # change. A user's own COMPLETE [EOS] block in union-crax.ini still
           # overrides these at runtime (see LoadEosConfig).
-          if ($env:EOS_PRODUCT_ID -and $env:EOS_CLIENT_SECRET) {
+          # Secrets configured -> every field must be WELL-FORMED, not merely present.
+          # A malformed value (a pasted "undefined" shipped in v1.20.14) bakes a DLL
+          # that looks fine and then fails Epic auth at runtime, so fail loudly here
+          # rather than ship a silently-broken default. Lengths only -- never values.
+          if ($env:EOS_PRODUCT_ID -or $env:EOS_CLIENT_SECRET) {
+            $fields = [ordered]@{
+              'EOS_PRODUCT_ID'    = $env:EOS_PRODUCT_ID
+              'EOS_SANDBOX_ID'    = $env:EOS_SANDBOX_ID
+              'EOS_DEPLOYMENT_ID' = $env:EOS_DEPLOYMENT_ID
+              'EOS_CLIENT_ID'     = $env:EOS_CLIENT_ID
+              'EOS_CLIENT_SECRET' = $env:EOS_CLIENT_SECRET
+            }
+            foreach ($name in $fields.Keys) {
+              $v = [string]$fields[$name]
+              Write-Host "  $name length=$($v.Length)"
+              if ([string]::IsNullOrWhiteSpace($v)) { throw "$name is empty or whitespace" }
+              if ($v -match '^(undefined|null|none|nil|todo|changeme)$') { throw "$name looks like a placeholder, not a credential" }
+              if ($v.Length -lt 16) { throw "$name is implausibly short ($($v.Length) chars)" }
+              if ($v -notmatch '^[A-Za-z0-9+/=_-]+$') { throw "$name contains characters no EOS credential should have" }
+            }
             $lines = @(
               '#ifndef UCO_EOS_BAKED_CREDS_H',
               '#define UCO_EOS_BAKED_CREDS_H',
@@ -109,6 +128,27 @@ jobs:
             Write-Host "==> $($p.Name) [Release|x64]"
             msbuild $p.FullName -p:Configuration=Release -p:Platform=x64 -m
             if ($LASTEXITCODE -ne 0) { throw "Plugin build failed: $($p.Name)" }
+          }
+
+      - name: Verify EOS creds actually baked into EOS_custom.dll
+        shell: pwsh
+        env:
+          EOS_PRODUCT_ID:    ${{ secrets.EOS_PRODUCT_ID }}
+          EOS_CLIENT_SECRET: ${{ secrets.EOS_CLIENT_SECRET }}
+        run: |
+          # The bake is invisible until an EOS game fails auth in someone's hands, so
+          # prove the literals reached the binary before we ship it. v1.20.14 shipped
+          # with ClientSecret="undefined" and nothing caught it.
+          if (-not $env:EOS_PRODUCT_ID) {
+            Write-Host "No EOS secrets for this build; skipping bake verification (ini-only)"
+            return
+          }
+          $dll = "plugins/EOS_custom/relbuild/x64/EOS_custom.dll"
+          if (-not (Test-Path $dll)) { throw "EOS_custom.dll not found at $dll" }
+          $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($dll))
+          foreach ($f in @(@{n='ProductId';v=$env:EOS_PRODUCT_ID}, @{n='ClientSecret';v=$env:EOS_CLIENT_SECRET})) {
+            if ($text.Contains($f.v)) { Write-Host "  [OK] $($f.n) baked into EOS_custom.dll" }
+            else { throw "$($f.n) is NOT baked into EOS_custom.dll -- refusing to ship an inert/broken EOS default" }
           }
 
       - name: Test GUI patcher core
