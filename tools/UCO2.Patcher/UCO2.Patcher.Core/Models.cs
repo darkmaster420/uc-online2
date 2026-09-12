@@ -109,6 +109,9 @@ public sealed class PatchOptions
     public bool EmulateTicket { get; set; }
     public bool EnableSdr { get; set; }
     public bool InventoryAutoGrant { get; set; }
+    // [Settings] RealAppIdEnv -- expose ogAppId in the SteamAppId env for games that
+    // read it at startup and quit if it isn't their real AppId (e.g. Valheim).
+    public bool RealAppIdEnv { get; set; }
     // [VersionProxy] early-loader flags. LoadDllsEarly/SdrSafe are null = auto
     // (LoadDLLsEarly on when any plugin is deployed; SdrSafe on when SDR is on);
     // set true/false to force. RequireSteam defaults on (abort if Steam is closed).
@@ -147,6 +150,9 @@ public sealed class PatchOptions
     // [Coherence] LaunchReplicationServer -- host a local replication server (LAN mode).
     public bool CoherenceLaunchReplicationServer { get; set; }
     public string LegacyClientVersion { get; set; } = "";
+    // Manual [DLC] entries, one "appId=name" per line (name optional). Merged over
+    // the DLC the scanner discovers in the game folder; a manual entry wins.
+    public string ManualDlc { get; set; } = "";
     public Dictionary<string, string> AdditionalSettings { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     // Raw ini appended/merged verbatim: the escape hatch for any flag without a
     // dedicated control. Lines under a [Section] header target that section (a key

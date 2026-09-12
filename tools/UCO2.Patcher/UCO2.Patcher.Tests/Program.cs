@@ -28,6 +28,7 @@ internal static class Program
             TestBackendValidation(root);
             TestPlayFabPlanning(root);
             TestEosPlanning(root);
+            TestRealAppIdEnvAndManualDlc(root);
             TestEosNoPresenceConfig(root);
             TestAdvancedAndProxyConfig(root);
             await TestSelfUpdateLayout(root);
@@ -103,6 +104,45 @@ internal static class Program
         True(config.Contains("PassthroughTicket=true"), "Passthrough flag");
         True(config.Contains("Client=017"), "Client flag");
         True(config.Contains("CustomFlag=yes"), "Custom flag");
+        passed++;
+    }
+
+    // [Settings] RealAppIdEnv + the manual [DLC] box: parsing, and manual-wins-over-scanner.
+    private static void TestRealAppIdEnvAndManualDlc(string root)
+    {
+        GameScanResult game = FakeGame(root);
+
+        // Written either way, so re-patching can turn it back off.
+        True(ConfigBuilder.Build(game, new PatchOptions { OriginalAppId = 892970, InstallOverlayProxy = false, RealAppIdEnv = true })
+            .Contains("RealAppIdEnv=true"), "RealAppIdEnv=true written");
+        True(ConfigBuilder.Build(game, new PatchOptions { OriginalAppId = 892970, InstallOverlayProxy = false })
+            .Contains("RealAppIdEnv=false"), "RealAppIdEnv off by default");
+
+        // Manual entries: "id=name", a bare id, and junk/comments/zero dropped.
+        string cfg = ConfigBuilder.Build(game, new PatchOptions
+        {
+            OriginalAppId = 123,
+            InstallOverlayProxy = false,
+            ManualDlc = "   \n; a comment\n# another\n2000 = Deluxe Pack \n2001\nnot-a-number=x\n0=zero\n",
+        });
+        True(cfg.Contains("2000=Deluxe Pack"), "manual DLC id=name (trimmed)");
+        True(cfg.Contains("2001=DLC 2001"), "bare manual DLC id gets a placeholder name");
+        True(!cfg.Contains("not-a-number") && !cfg.Contains("comment"), "junk and comments dropped");
+        True(!cfg.Contains("0=zero"), "appId 0 dropped");
+
+        // A manual entry overrides the same id discovered by the scanner.
+        string dlcRoot = Path.Combine(root, "manual-dlc");
+        Directory.CreateDirectory(dlcRoot);
+        File.WriteAllText(Path.Combine(dlcRoot, "configs.app.ini"), "3000=Scanned Name\n3001=Kept Name\n");
+        GameScanResult scanned = FakeGame(dlcRoot);
+        string merged = ConfigBuilder.Build(scanned, new PatchOptions
+        {
+            OriginalAppId = 123,
+            InstallOverlayProxy = false,
+            ManualDlc = "3000=Manual Name",
+        });
+        True(merged.Contains("3000=Manual Name") && !merged.Contains("Scanned Name"), "manual DLC beats the scanner");
+        True(merged.Contains("3001=Kept Name"), "scanner DLC kept when not overridden");
         passed++;
     }
 

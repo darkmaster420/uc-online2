@@ -256,6 +256,17 @@
                                         </StackPanel>
                                     </Border>
 
+                                    <!-- DLC -->
+                                    <Border Background="{StaticResource PanelAltBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="13,12" Margin="0,0,0,10">
+                                        <StackPanel>
+                                            <TextBlock Text="DLC" Foreground="{StaticResource MutedBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,0,8" />
+                                            <TextBlock Text="DLC found in the game folder is added automatically. Add any it missed here, one per line, as appId=name (the name is optional)."
+                                                       Foreground="{StaticResource MutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
+                                            <TextBox x:Name="ManualDlcBox" Height="74" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
+                                                     ToolTip="One per line, e.g. 12345=Deluxe Pack. Merged into [DLC]; a manual entry overrides a discovered one. The 'Unlock DLC' toggle above still controls UnlockAll." />
+                                        </StackPanel>
+                                    </Border>
+
                                     <!-- General & runtime -->
                                     <Border Background="{StaticResource PanelAltBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="13,12">
                                         <StackPanel>
@@ -283,7 +294,8 @@
                                                 <StackPanel Width="230">
                                                     <ToggleButton x:Name="LoadDllsEarlyCheck" Style="{StaticResource OptionToggle}" Content="Load DLLs early" ToolTip="[VersionProxy] LoadDLLsEarly — preload steam_api64 before the game so plugin hooks land in time. Defaults on when a plugin is deployed." />
                                                     <ToggleButton x:Name="SdrSafeCheck" Style="{StaticResource OptionToggle}" Content="SDR-safe context" ToolTip="[VersionProxy] SdrSafe — keep the process Steam context on the real AppId so early overlay load doesn't poison SDR relay auth. Defaults on when SDR is on." />
-                                                    <ToggleButton x:Name="RequireSteamCheck" Style="{StaticResource OptionToggle}" IsChecked="True" Content="Require Steam running" ToolTip="[VersionProxy] RequireSteam — abort the launch with a prompt if Steam isn't running (default on)." Margin="0" />
+                                                    <ToggleButton x:Name="RequireSteamCheck" Style="{StaticResource OptionToggle}" IsChecked="True" Content="Require Steam running" ToolTip="[VersionProxy] RequireSteam — abort the launch with a prompt if Steam isn't running (default on)." />
+                                                    <ToggleButton x:Name="RealAppIdEnvCheck" Style="{StaticResource OptionToggle}" Content="Show game its real AppId" ToolTip="[Settings] RealAppIdEnv — some games read the SteamAppId env at startup and quit if it isn't their real AppId (Valheim logs &quot;Invalid APPID&quot; and exits). Shows the game ogAppId for that check while Steam still connects as the spoofed AppId." Margin="0" />
                                                 </StackPanel>
                                             </WrapPanel>
                                         </StackPanel>

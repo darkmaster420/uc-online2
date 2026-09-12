@@ -245,12 +245,19 @@ public partial class MainWindow : Window
         LoadDllsEarlyCheck.IsChecked = ini.GetBool("VersionProxy", "LoadDLLsEarly", anyPluginSelected);
         SdrSafeCheck.IsChecked = ini.GetBool("VersionProxy", "SdrSafe", SdrCheck.IsChecked == true);
         RequireSteamCheck.IsChecked = ini.GetBool("VersionProxy", "RequireSteam", true);
+        RealAppIdEnvCheck.IsChecked = ini.GetBool("Settings", "RealAppIdEnv");
+
+        // Round-trip any [DLC] entries already in the ini (everything but UnlockAll)
+        // so re-patching doesn't silently drop hand-added DLC.
+        ManualDlcBox.Text = string.Join(Environment.NewLine, ini.GetSection("DLC")
+            .Where(pair => !string.Equals(pair.Key, "UnlockAll", StringComparison.OrdinalIgnoreCase))
+            .Select(pair => $"{pair.Key}={pair.Value}"));
 
         string[] known =
         [
             "AppId", "ogAppId", "PluginsFolder", "GetStubbedLol", "LoadOverlay", "LogOverlay",
             "WarnOverlayDisabled", "VerboseLog", "ForceOwnership", "PassthroughTicket", "EmulateTicket",
-            "SDR", "InventoryAutoGrant", "Client"
+            "SDR", "InventoryAutoGrant", "Client", "RealAppIdEnv"
         ];
         AdditionalFlagsBox.Text = string.Join(Environment.NewLine, ini.GetSection("Settings")
             .Where(pair => !known.Contains(pair.Key, StringComparer.OrdinalIgnoreCase))
@@ -307,6 +314,8 @@ public partial class MainWindow : Window
             LoadDllsEarly = LoadDllsEarlyCheck.IsChecked,
             SdrSafe = SdrSafeCheck.IsChecked,
             RequireSteam = RequireSteamCheck.IsChecked == true,
+            RealAppIdEnv = RealAppIdEnvCheck.IsChecked == true,
+            ManualDlc = ManualDlcBox.Text,
             LegacyClientVersion = LegacyClientBox.Text,
             // The "Advanced ini" box is the raw escape hatch: merged verbatim into
             // the generated config (any section, overrides generated values).

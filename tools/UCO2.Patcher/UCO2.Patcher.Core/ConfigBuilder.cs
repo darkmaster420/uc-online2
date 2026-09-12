@@ -22,6 +22,7 @@ public static partial class ConfigBuilder
         output.AppendLine($"EmulateTicket={Bool(options.EmulateTicket)}");
         output.AppendLine($"SDR={Bool(options.EnableSdr)}");
         output.AppendLine($"InventoryAutoGrant={Bool(options.InventoryAutoGrant)}");
+        output.AppendLine($"RealAppIdEnv={Bool(options.RealAppIdEnv)}");
         if (!string.IsNullOrWhiteSpace(options.LegacyClientVersion))
             output.AppendLine($"Client={SingleLine(options.LegacyClientVersion)}");
         foreach ((string key, string value) in options.AdditionalSettings.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
@@ -30,8 +31,13 @@ public static partial class ConfigBuilder
         output.AppendLine();
         output.AppendLine("[DLC]");
         output.AppendLine($"UnlockAll={Bool(options.UnlockAllDlc)}");
-        foreach ((uint appId, string name) in FindDlcEntries(game))
-            output.AppendLine($"{appId}={SingleLine(name)}");
+        // Scanner-discovered DLC first, then the user's manual entries on top so a
+        // hand-entered name/id wins over whatever was found in the game folder.
+        var dlc = new Dictionary<uint, string>();
+        foreach ((uint appId, string name) in FindDlcEntries(game)) dlc[appId] = name;
+        foreach ((uint appId, string name) in ParseManualDlc(options.ManualDlc)) dlc[appId] = name;
+        foreach (KeyValuePair<uint, string> entry in dlc.OrderBy(pair => pair.Key))
+            output.AppendLine($"{entry.Key}={SingleLine(entry.Value)}");
 
         // Early-load proxy (version.dll) config.
         //   LoadDLLsEarly: when any plugin is deployed, preload steam_api64
@@ -185,6 +191,26 @@ public static partial class ConfigBuilder
             }
         }
         return string.Join("\n", lines);
+    }
+
+    // Manual [DLC] entries typed in the GUI: one "appId=name" per line, name optional
+    // (blank names become "DLC <appId>"). Blank lines and ; / # comments are ignored,
+    // as are lines whose id isn't a positive number.
+    private static IReadOnlyList<(uint AppId, string Name)> ParseManualDlc(string? text)
+    {
+        var list = new List<(uint, string)>();
+        if (string.IsNullOrWhiteSpace(text)) return list;
+        foreach (string raw in text.Replace("\r\n", "\n").Split('\n'))
+        {
+            string line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith(';') || line.StartsWith('#')) continue;
+            int eq = line.IndexOf('=');
+            string idPart = eq >= 0 ? line[..eq].Trim() : line;
+            string name = eq >= 0 ? line[(eq + 1)..].Trim() : "";
+            if (!uint.TryParse(idPart, out uint appId) || appId == 0) continue;
+            list.Add((appId, name.Length > 0 ? name : $"DLC {appId}"));
+        }
+        return list;
     }
 
     private static IReadOnlyList<(uint AppId, string Name)> FindDlcEntries(GameScanResult game)
