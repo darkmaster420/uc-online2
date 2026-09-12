@@ -102,6 +102,9 @@ S_API void* S_CALLTYPE SteamInternal_FindOrCreateUserInterface(HSteamUser hUser,
 				// that is a different object with a different vtable -- so hook the
 				// instance actually being handed out, not just ours.
 				UcoInstallUserAuthHooks(pIface, ver);
+				// Same for ISteamRemoteStorage under [Settings] LocalSaves: the
+				// version the game takes is the one whose saves must go local.
+				UcoInstallRemoteStorageHooks(pIface, ver);
 				return pIface;
 			}
 

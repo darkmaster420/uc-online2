@@ -112,6 +112,12 @@ public sealed class PatchOptions
     // [Settings] RealAppIdEnv -- expose ogAppId in the SteamAppId env for games that
     // read it at startup and quit if it isn't their real AppId (e.g. Valheim).
     public bool RealAppIdEnv { get; set; }
+    // [Settings] LocalSaves -- DEFAULT ON. Steam Cloud is bound to the RUNNING
+    // app, so without this every UCO2 game shares the spoofed AppId's one
+    // remote folder and games that pick a common save name overwrite each other.
+    // Reports cloud as disabled (so a game with its own save path uses it) and
+    // serves the Steam file API from <game>/uco_cloud for games that have none.
+    public bool LocalSaves { get; set; } = true;
     // [VersionProxy] early-loader flags. LoadDllsEarly/SdrSafe are null = auto
     // (LoadDLLsEarly on when any plugin is deployed; SdrSafe on when SDR is on);
     // set true/false to force. RequireSteam defaults on (abort if Steam is closed).

@@ -28,7 +28,7 @@ internal static class Program
             TestBackendValidation(root);
             TestPlayFabPlanning(root);
             TestEosPlanning(root);
-            TestRealAppIdEnvAndManualDlc(root);
+            TestSettingsFlagsAndManualDlc(root);
             TestEosNoPresenceConfig(root);
             TestAdvancedAndProxyConfig(root);
             await TestSelfUpdateLayout(root);
@@ -107,8 +107,9 @@ internal static class Program
         passed++;
     }
 
-    // [Settings] RealAppIdEnv + the manual [DLC] box: parsing, and manual-wins-over-scanner.
-    private static void TestRealAppIdEnvAndManualDlc(string root)
+    // [Settings] RealAppIdEnv / LocalSaves + the manual [DLC] box: parsing,
+    // and manual-wins-over-scanner.
+    private static void TestSettingsFlagsAndManualDlc(string root)
     {
         GameScanResult game = FakeGame(root);
 
@@ -117,6 +118,13 @@ internal static class Program
             .Contains("RealAppIdEnv=true"), "RealAppIdEnv=true written");
         True(ConfigBuilder.Build(game, new PatchOptions { OriginalAppId = 892970, InstallOverlayProxy = false })
             .Contains("RealAppIdEnv=false"), "RealAppIdEnv off by default");
+
+        // LocalSaves is the one [Settings] toggle that defaults ON, so the default-
+        // constructed options must write it as true and an explicit false must stick.
+        True(ConfigBuilder.Build(game, new PatchOptions { OriginalAppId = 1, InstallOverlayProxy = false })
+            .Contains("LocalSaves=true"), "LocalSaves on by default");
+        True(ConfigBuilder.Build(game, new PatchOptions { OriginalAppId = 1, InstallOverlayProxy = false, LocalSaves = false })
+            .Contains("LocalSaves=false"), "LocalSaves can be turned off");
 
         // Manual entries: "id=name", a bare id, and junk/comments/zero dropped.
         string cfg = ConfigBuilder.Build(game, new PatchOptions

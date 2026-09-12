@@ -135,6 +135,56 @@ All keys live under `[Settings]` unless noted.
 | `WarnOverlayDisabled` | `false` | Log a startup hint when the overlay looks like it won't work. |
 | `UnlockDLC` | *(none)* | Legacy comma-separated DLC list; prefer the [`[DLC]`](#dlc) section. |
 | `VerboseLog` | `false` | Per-frame callback traces. Very noisy — for debugging only. |
+| `LocalSaves` | `true` | Keep saves out of the spoofed AppId's shared cloud folder. See [Saves and Steam Cloud](#saves-and-steam-cloud). |
+| `RealAppIdEnv` | `false` | Show the game its real AppId in the `SteamAppId` env for a startup check. Requires `ogAppId`. |
+| `InventoryAutoGrant` | `false` | Serve `ISteamInventory` purchases/grants from a local store. |
+| `ForceOwnership` | `true` | Answer ownership checks for the real AppId. |
+
+### Saves and Steam Cloud
+
+Real Steam binds `ISteamRemoteStorage` to the app the process is **running as**, which
+under UCOnline2 is the spoofed AppId. Left alone, that means every UCO2 game on the
+machine shares one cloud folder:
+
+```
+Steam\userdata\<account>\480\remote\
+    OutbreakSettings.data          <- game A
+    SaveData                       <- game B   (generic name: collision bait)
+    Saved\SaveGames\SaveData.dat   <- game C
+```
+
+Two games that pick the same save name overwrite each other, and because that folder
+really does sync, a second machine can pull one game's `SaveData` down and hand it to
+a different game.
+
+`[Settings] LocalSaves` (**on by default**) fixes it in two steps:
+
+1. **Steam Cloud reports as disabled.** Most games keep their own local save path and
+   simply use it — `%LOCALAPPDATA%`, `AppData\LocalLow`, `Documents\My Games` — which
+   is where that game's own backups, wikis and save editors expect to find it.
+2. **The Steam file API is served from `<game folder>\uco_cloud\`** for the games that
+   have no other path. Plenty of titles use `ISteamRemoteStorage` *as* their
+   filesystem, and for those, "cloud off" changes nothing on real Steam — that flag
+   only stops the upload; writes still go to the shared folder. So they get somewhere
+   else to land.
+
+Anything already in the spoofed app's cloud folder is **copied** into `uco_cloud\` the
+first time the game runs with this on, so an existing save is not left behind. Nothing
+is deleted — the originals stay where they were, and `%TEMP%\uc_online2.log` lists what
+was imported.
+
+Set `LocalSaves=false` to go back to writing straight into the spoofed AppId's cloud
+folder. Workshop/UGC is unaffected either way; it still talks to real Steam.
+
+Two limits worth knowing:
+
+- **32-bit games** only get the flat-export half of this. The C++ interface methods are
+  `__thiscall` on x86 and the detours are `__cdecl`, so hooking them would scramble the
+  arguments — and a scrambled save write is worse than no fix. Most 32-bit titles
+  (Steamworks.NET, older Unity) go through the flat exports anyway.
+- **Steam Auto-Cloud** games — where the file patterns live in Valve's app config rather
+  than in the game's code — were never affected. Under the spoofed AppId the Steam
+  client has no auto-cloud config to act on, so those saves were always local.
 
 ### DLC
 

@@ -352,6 +352,7 @@ extern CSteamAPIContext g_ClientCtx;
 // handed. Defined in dllmain.cpp; declared here so the interface factory can
 // call it as interfaces are created.
 void UcoInstallUserAuthHooks(void* pIface, const char* ver);
+void UcoInstallRemoteStorageHooks(void* pIface, const char* ver);
 
 class CSteamAppsStub : public ISteamApps
 {

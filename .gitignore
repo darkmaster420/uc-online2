@@ -24,3 +24,7 @@ tools/UCO2.Patcher/publish/
 
 # Local scrapped work (reversible archive, never released)
 .backup/
+
+# Standalone C++ check build output (tests/build_cloudemu_test.bat)
+tests/*.exe
+tests/*.obj

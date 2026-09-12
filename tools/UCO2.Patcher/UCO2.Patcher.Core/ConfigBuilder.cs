@@ -23,6 +23,7 @@ public static partial class ConfigBuilder
         output.AppendLine($"SDR={Bool(options.EnableSdr)}");
         output.AppendLine($"InventoryAutoGrant={Bool(options.InventoryAutoGrant)}");
         output.AppendLine($"RealAppIdEnv={Bool(options.RealAppIdEnv)}");
+        output.AppendLine($"LocalSaves={Bool(options.LocalSaves)}");
         if (!string.IsNullOrWhiteSpace(options.LegacyClientVersion))
             output.AppendLine($"Client={SingleLine(options.LegacyClientVersion)}");
         foreach ((string key, string value) in options.AdditionalSettings.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))

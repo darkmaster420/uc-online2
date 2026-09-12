@@ -30,6 +30,7 @@ S_API ISteamClient* g_pSteamClientGameServer = nullptr;
 void InstallEarlyAppIdHook(ISteamUtils* pUtils);
 
 #include "include/api/inventory_emu.h"
+#include "include/api/remote_storage_emu.h"
 #include "include/api/api_callbacks.h"
 #include "include/api/api_client.h"
 #include "include/api/api_interfaces.h"
@@ -597,6 +598,11 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 		if (s_PluginLoader.GetInventoryAutoGrant())
 			UcoInvEmu::Init(s_PluginLoader.GetIniPath(), s_PluginLoader.GetOgAppId());
 
+		// Local Steam Cloud: keep saves out of the spoofed AppId's shared
+		// 480/remote bucket, where UCO2 games collide with each other.
+		if (s_PluginLoader.GetLocalSaves())
+			UcoCloudEmu::Init(s_PluginLoader.GetIniPath());
+
 		// DLC ownership: [DLC] UnlockAll + named entries, plus the legacy
 		// [Settings] UnlockDLC list. Loaded before any game code can ask.
 		UcoDlcStore::Load(s_PluginLoader.GetIniPath(), s_PluginLoader.GetOgAppId());
@@ -795,9 +801,13 @@ void CCallbackDispatcher::ExecuteCallResult(HSteamPipe hPipe, SteamAPICall_t hCa
 	BYTE* pBuffer = new BYTE[pCb->GetCallbackSizeBytes()]();
 	bool bFailed = false;
 
-	bool bResult = UcoInvEmu::IsOurCall(hCall)
-		? UcoInvEmu::GetAPICallResult(hCall, pBuffer, pCb->GetCallbackSizeBytes(), pCb->GetICallback(), &bFailed)
-		: m_pfnGetAPICallResult(hPipe, hCall, pBuffer, pCb->GetCallbackSizeBytes(), pCb->GetICallback(), &bFailed);
+	bool bResult;
+	if (UcoInvEmu::IsOurCall(hCall))
+		bResult = UcoInvEmu::GetAPICallResult(hCall, pBuffer, pCb->GetCallbackSizeBytes(), pCb->GetICallback(), &bFailed);
+	else if (UcoCloudEmu::IsOurCall(hCall))
+		bResult = UcoCloudEmu::GetAPICallResult(hCall, pBuffer, pCb->GetCallbackSizeBytes(), pCb->GetICallback(), &bFailed);
+	else
+		bResult = m_pfnGetAPICallResult(hPipe, hCall, pBuffer, pCb->GetCallbackSizeBytes(), pCb->GetICallback(), &bFailed);
 
 	if (bResult && !bFailed)
 	{
@@ -2015,6 +2025,203 @@ void UcoInstallUserAuthHooks(void* pIface, const char* ver)
         ok, applicable, ver, L.ticketTakesIdentity ? "" : " (3-arg ticket variant)");
 }
 
+// ------------------------------------------------------------
+// ISteamRemoteStorage vtable hooks -- the [Settings] LocalSaves path for games
+// that use the C++ interface directly instead of the flat SteamAPI_* exports.
+//
+// Same hazard as the ISteamUser auth hooks: a game may ask for an older
+// interface version than the one we hold, and Steam hands out a SEPARATE object
+// per version. The layouts, read off the shipped headers for 010-016:
+//
+//   version  FileWrite  async trio  FileExists  IsCloudEnabledForApp
+//   <=012    0          absent      10          19
+//   >=013    0          2,3,4       13          22
+//
+// 013 inserted FileWriteAsync/FileReadAsync/FileReadAsyncComplete after
+// FileRead and pushed everything below down by three; 013/014/015/016 are
+// otherwise identical through SetCloudEnabledForApp. Versions outside that
+// range are not hooked -- a missed hook means saves keep going to the shared
+// bucket, a wrong hook detours some unrelated method.
+//
+// The detours never call the original: with LocalSaves on, the local store IS
+// the storage. UGC/workshop slots are left alone and still reach real Steam.
+// ------------------------------------------------------------
+static bool S_CALLTYPE Hooked_RS_FileWrite(void*, const char* f, const void* p, int32 n)
+{ return UcoCloudEmu::FileWrite(f, p, n); }
+static int32 S_CALLTYPE Hooked_RS_FileRead(void*, const char* f, void* p, int32 n)
+{ return UcoCloudEmu::FileRead(f, p, n); }
+static SteamAPICall_t S_CALLTYPE Hooked_RS_FileWriteAsync(void*, const char* f, const void* p, uint32 n)
+{ return UcoCloudEmu::FileWriteAsync(f, p, n); }
+static SteamAPICall_t S_CALLTYPE Hooked_RS_FileReadAsync(void*, const char* f, uint32 off, uint32 n)
+{ return UcoCloudEmu::FileReadAsync(f, off, n); }
+static bool S_CALLTYPE Hooked_RS_FileReadAsyncComplete(void*, SteamAPICall_t h, void* p, uint32 n)
+{ return UcoCloudEmu::FileReadAsyncComplete(h, p, n); }
+static bool S_CALLTYPE Hooked_RS_FileForget(void*, const char* f)
+{ return UcoCloudEmu::FileForget(f); }
+static bool S_CALLTYPE Hooked_RS_FileDelete(void*, const char* f)
+{ return UcoCloudEmu::FileDelete(f); }
+static bool S_CALLTYPE Hooked_RS_SetSyncPlatforms(void*, const char*, ERemoteStoragePlatform)
+{ return true; }
+static UGCFileWriteStreamHandle_t S_CALLTYPE Hooked_RS_FileWriteStreamOpen(void*, const char* f)
+{ return UcoCloudEmu::FileWriteStreamOpen(f); }
+static bool S_CALLTYPE Hooked_RS_FileWriteStreamWriteChunk(void*, UGCFileWriteStreamHandle_t h, const void* p, int32 n)
+{ return UcoCloudEmu::FileWriteStreamWriteChunk(h, p, n); }
+static bool S_CALLTYPE Hooked_RS_FileWriteStreamClose(void*, UGCFileWriteStreamHandle_t h)
+{ return UcoCloudEmu::FileWriteStreamClose(h); }
+static bool S_CALLTYPE Hooked_RS_FileWriteStreamCancel(void*, UGCFileWriteStreamHandle_t h)
+{ return UcoCloudEmu::FileWriteStreamCancel(h); }
+static bool S_CALLTYPE Hooked_RS_FileExists(void*, const char* f)
+{ return UcoCloudEmu::FileExists(f); }
+static bool S_CALLTYPE Hooked_RS_FilePersisted(void*, const char* f)
+{ return UcoCloudEmu::FilePersisted(f); }
+static int32 S_CALLTYPE Hooked_RS_GetFileSize(void*, const char* f)
+{ return UcoCloudEmu::GetFileSize(f); }
+static int64 S_CALLTYPE Hooked_RS_GetFileTimestamp(void*, const char* f)
+{ return UcoCloudEmu::GetFileTimestamp(f); }
+static ERemoteStoragePlatform S_CALLTYPE Hooked_RS_GetSyncPlatforms(void*, const char*)
+{ return k_ERemoteStoragePlatformAll; }
+static int32 S_CALLTYPE Hooked_RS_GetFileCount(void*)
+{ return UcoCloudEmu::GetFileCount(); }
+static const char* S_CALLTYPE Hooked_RS_GetFileNameAndSize(void*, int i, int32* pSize)
+{ return UcoCloudEmu::GetFileNameAndSize(i, pSize); }
+static bool S_CALLTYPE Hooked_RS_GetQuota(void*, uint64* pTotal, uint64* pAvail)
+{ return UcoCloudEmu::GetQuota(pTotal, pAvail); }
+static bool S_CALLTYPE Hooked_RS_IsCloudEnabled(void*)
+{ return UcoCloudEmu::IsCloudEnabled(); }
+// Deliberately does nothing: forwarding would flip the real Steam Cloud setting
+// for Spacewar, outside this game and permanently.
+static void S_CALLTYPE Hooked_RS_SetCloudEnabledForApp(void*, bool) {}
+
+struct UcoRemoteStorageLayout
+{
+    int write, read, writeAsync, readAsync, readAsyncDone;
+    int forget, del, setSync, streamOpen, streamChunk, streamClose, streamCancel;
+    int exists, persisted, size, timestamp, getSync, count, nameAndSize;
+    int quota, cloudAccount, cloudApp, setCloudApp;
+};
+
+static bool UcoRemoteStorageLayoutFor(const char* ver, UcoRemoteStorageLayout& out)
+{
+    const char* kPrefix = "STEAMREMOTESTORAGE_INTERFACE_VERSION";
+    const size_t kPrefixLen = 36;
+    if (!ver || _strnicmp(ver, kPrefix, kPrefixLen) != 0)
+        return false;
+    const int n = atoi(ver + kPrefixLen);
+    if (n >= 13)
+    {
+        out = { 0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12,
+                13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23 };
+        return true;
+    }
+    if (n >= 10)
+    {
+        // No async trio; everything after FileRead sits three slots higher.
+        out = { 0, 1, -1, -1, -1, 2, 3, 5, 6, 7, 8, 9,
+                10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 };
+        return true;
+    }
+    return false;   // 009 and older: layouts not verified, so do not touch them
+}
+
+void UcoInstallRemoteStorageHooks(void* pIface, const char* ver)
+{
+    if (!UcoCloudEmu::Enabled() || !pIface || !ver)
+        return;
+
+#if defined(_M_IX86)
+    // These interface methods are __thiscall on x86 (this in ECX) but the
+    // detours above are __cdecl, so every argument would land one slot off --
+    // see the same open bug on the DLC/auth hooks. A wrong bool there is a
+    // cosmetic glitch; here it would write a corrupt save, so 32-bit games get
+    // only the flat-export path (which passes instancePtr explicitly and is
+    // unaffected). That covers Steamworks.NET and most 32-bit Unity titles.
+    (void)ver;
+    UCOLOG("[UCOnline2] LocalSaves: skipping RemoteStorage vtable hooks on x86 "
+           "(calling convention); the flat SteamAPI_* exports still go local");
+    return;
+#else
+
+    UcoRemoteStorageLayout L = {};
+    if (!UcoRemoteStorageLayoutFor(ver, L))
+    {
+        if (_strnicmp(ver, "STEAMREMOTESTORAGE", 18) == 0)
+            UCOLOG("[UCOnline2] %s: RemoteStorage vtable layout unknown -- NOT hooking "
+                   "(saves through this interface keep going to the spoofed AppId)", ver);
+        return;
+    }
+
+    // One object may be handed out repeatedly; hook each vtable once.
+    static void* s_seen[8] = {};
+    static int   s_seenCount = 0;
+    void** vt = *reinterpret_cast<void***>(pIface);
+    for (int i = 0; i < s_seenCount; ++i)
+        if (s_seen[i] == (void*)vt)
+            return;
+    if (s_seenCount < (int)(sizeof(s_seen) / sizeof(s_seen[0])))
+        s_seen[s_seenCount++] = (void*)vt;
+
+    // Pull any existing save out of the spoofed app's cloud bucket FIRST --
+    // after the hooks are on, this interface just reads the local store back.
+    UcoCloudEmu::ImportFromSteam(pIface,
+        (UcoCloudEmu::PfnGetFileCount)vt[L.count],
+        (UcoCloudEmu::PfnGetFileNameAndSize)vt[L.nameAndSize],
+        (UcoCloudEmu::PfnFileRead)vt[L.read]);
+
+    MH_Initialize();
+
+    struct Item { int index; void* detour; const char* name; };
+    const Item items[] = {
+        { L.write,        (void*)&Hooked_RS_FileWrite,                 "FileWrite" },
+        { L.read,         (void*)&Hooked_RS_FileRead,                  "FileRead" },
+        { L.writeAsync,   (void*)&Hooked_RS_FileWriteAsync,            "FileWriteAsync" },
+        { L.readAsync,    (void*)&Hooked_RS_FileReadAsync,             "FileReadAsync" },
+        { L.readAsyncDone,(void*)&Hooked_RS_FileReadAsyncComplete,     "FileReadAsyncComplete" },
+        { L.forget,       (void*)&Hooked_RS_FileForget,                "FileForget" },
+        { L.del,          (void*)&Hooked_RS_FileDelete,                "FileDelete" },
+        { L.setSync,      (void*)&Hooked_RS_SetSyncPlatforms,          "SetSyncPlatforms" },
+        { L.streamOpen,   (void*)&Hooked_RS_FileWriteStreamOpen,       "FileWriteStreamOpen" },
+        { L.streamChunk,  (void*)&Hooked_RS_FileWriteStreamWriteChunk, "FileWriteStreamWriteChunk" },
+        { L.streamClose,  (void*)&Hooked_RS_FileWriteStreamClose,      "FileWriteStreamClose" },
+        { L.streamCancel, (void*)&Hooked_RS_FileWriteStreamCancel,     "FileWriteStreamCancel" },
+        { L.exists,       (void*)&Hooked_RS_FileExists,                "FileExists" },
+        { L.persisted,    (void*)&Hooked_RS_FilePersisted,             "FilePersisted" },
+        { L.size,         (void*)&Hooked_RS_GetFileSize,               "GetFileSize" },
+        { L.timestamp,    (void*)&Hooked_RS_GetFileTimestamp,          "GetFileTimestamp" },
+        { L.getSync,      (void*)&Hooked_RS_GetSyncPlatforms,          "GetSyncPlatforms" },
+        { L.count,        (void*)&Hooked_RS_GetFileCount,              "GetFileCount" },
+        { L.nameAndSize,  (void*)&Hooked_RS_GetFileNameAndSize,        "GetFileNameAndSize" },
+        { L.quota,        (void*)&Hooked_RS_GetQuota,                  "GetQuota" },
+        { L.cloudAccount, (void*)&Hooked_RS_IsCloudEnabled,            "IsCloudEnabledForAccount" },
+        { L.cloudApp,     (void*)&Hooked_RS_IsCloudEnabled,            "IsCloudEnabledForApp" },
+        { L.setCloudApp,  (void*)&Hooked_RS_SetCloudEnabledForApp,     "SetCloudEnabledForApp" },
+    };
+
+    int ok = 0, applicable = 0;
+    for (const Item& it : items)
+    {
+        if (it.index < 0)                          // method absent in this version
+            continue;
+        ++applicable;
+        void* target = vt[it.index];
+        void* dummyOriginal = nullptr;             // detours never call through
+        MH_STATUS st = MH_CreateHook(target, it.detour, &dummyOriginal);
+        if (st == MH_ERROR_ALREADY_CREATED)        // shared impl across versions
+        {
+            ++ok;
+            continue;
+        }
+        if (st == MH_OK && MH_EnableHook(target) == MH_OK)
+            ++ok;
+        else
+            UCOLOG("[UCOnline2] %s: failed to hook %s (vtable[%d]): %d",
+                ver, it.name, it.index, st);
+    }
+
+    UCOLOG("[UCOnline2] LocalSaves: %d/%d RemoteStorage hooks installed on %s",
+        ok, applicable, ver);
+#endif
+}
+
 void InstallSteamSpoofHooks()
 {
     if (!g_bClientReady)
@@ -2103,6 +2310,13 @@ void InstallSteamSpoofHooks()
     // its own vtable, so hooking only ours silently misses every call.
     if (g_bEmulateAuthTicket && g_ClientCtx.SteamUser())
         UcoInstallUserAuthHooks(g_ClientCtx.SteamUser(), STEAMUSER_INTERFACE_VERSION);
+
+    // Same story for ISteamRemoteStorage: a game may take a different version
+    // than ours (hooked in the interface factory), but it may equally use the
+    // one we hold, so cover that object too. Installing twice is a no-op.
+    if (UcoCloudEmu::Enabled() && g_ClientCtx.SteamRemoteStorage())
+        UcoInstallRemoteStorageHooks(g_ClientCtx.SteamRemoteStorage(),
+            STEAMREMOTESTORAGE_INTERFACE_VERSION);
 }
 
 static void SteamStub_Init()

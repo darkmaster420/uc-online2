@@ -226,6 +226,21 @@ uint32 GetOgAppId()
 		return IniReadBool("InventoryAutoGrant", false);
 	}
 
+	// [Settings] LocalSaves=true (DEFAULT ON) -- keep Steam Cloud saves out of the
+	// spoofed AppId's shared bucket. Real Steam binds ISteamRemoteStorage to the
+	// RUNNING app, so every UCO2 game otherwise writes into 480/remote together and
+	// games that pick a common name ("SaveData") overwrite each other -- and that
+	// bucket really does sync, so another machine pulls the wrong game's save down.
+	// Reports cloud as disabled (so a game with its own save path uses it) and
+	// serves the file API from <game>\uco_cloud for games that have no other path.
+	bool GetLocalSaves()
+	{
+		if (m_IniPath[0] == '\0')
+			return true;
+
+		return IniReadBool("LocalSaves", true);
+	}
+
 	// [Settings] VerboseLog=true re-enables the very chatty per-frame /
 	// per-callback log lines (RunCallbacks, ContextInit, GetHSteamPipe,
 	// callback dispatch traces). Off by default: those fire every frame and
